@@ -6,7 +6,7 @@ test = {
 
 // print test
 
-loop test {
+loop (test) {
     /**
       i : value
       j : key,
@@ -29,7 +29,7 @@ while k < 5 {
         k += 2
         continue
     }
-    k ++
+    ++ k
 }
 
-print "La boucle est fini !"
+print "La boucle est finie !"

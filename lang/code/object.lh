@@ -1,23 +1,30 @@
-String nom = "bien"
+// String nom = "bien"
 
-Array test = [nom == "Bien" ? 30 : 10 > 3 ? "bien" : "bad", 50]
-JSON<...> ok = { bien : "Ok" + " cool", "pardon" : 5 < 4 ? "Pardon !" : "OOh !",nom}
+// Array test = [nom == "Bien" ? 30 : 10 > 3 ? "bien" : "bad", 50]
+// JSON<...> ok = { bien : "Ok" + " cool", "pardon" : 5 < 4 ? "Pardon !" : "OOh !",nom}
 
-// debug {test,ok}
+// // debug {test,ok}
 
-ok.bien = "cool "
+// ok.bien = "cool "
 
-ok.ok = maj "yeah !"
+// ok.ok = maj "yeah !"
 
-other = ok
+// other = ok
 
-other.test = (nom){
-    debug "Hello " + nom
-}
-// other.ok = "bien"
+// other.test = (nom){
+//     debug "Hello " + nom
+// }
+// // other.ok = "bien"
 
-print ok
-other.test "Synthetic"
+// print ok
+// other.test "Synthetic"
+Number k = 0
+
+print {k}
+
+ok = k++
+
+print {k,ok}
 // print other
 // JSON ok = {
 //     bien : "Pas mal !",
