@@ -1,0 +1,232 @@
+@include _widget;
+
+@mixin Icon extends Widget, Listener, Route(
+    @unset $class,
+    $color: #000,
+    $badge: <Number>,
+    $badgeSize: .6em,
+    $top: 0;
+    $right: 16%,
+    $activateBadge: false,
+    $badgeBackground: $super.theme,
+    $badgeColor: $super.foregroundTheme
+){
+    <icon data-name="$name" style="color: $color; position: relative;" class="@SSPA.iconClass($class)">
+        <badge style="
+            display: @out($activateBadge ? inline-block : none);
+            position: absolute;
+            background-color: $badgeBackground;
+            color: $badgeColor;
+            padding: .3em;
+            top: $top;
+            font-size: $badgeSize;
+            border-radius: 100%;
+            line-height: $badgeSize;
+            right: $right;
+        ">$badge</badge>
+    </icon>
+}
+
+@mixin RoundedBox extends Widget(
+    $background : #fff,
+    $image : unset,
+    $width: 5em,
+    $height: 5em,
+    $radius : "100%",
+    $shadow : "0 0 2px 0 #777",
+    $overflow: hidden
+){}
+
+@mixin Logo extends RoundedBox(){
+    @var hasImage = $image == unset || $image.length == 0 ? false : true;
+    <logo style="width: $width;
+                 height:$width;
+                 display: $display;
+                 background-color: $background;
+                 border-radius : $radius;
+                 box-shadow : $shadow;
+                 overflow: $overflow;
+                 background-position: center;
+                 background-repeat: no-repeat;
+                 background-size: 100% auto;
+                 @out($hasImage ? background-image\: url($image);)">
+    </logo>
+}
+
+@mixin Avatar extends RoundedBox(
+    $square: 3em,
+    $fontSize: 1.6em,
+    $icon: <Icon> @use Icon("user", $style: {
+        color : "$color",
+        display: "@out($image == unset || @len($image) == 0 ? inline-block : none)"
+    })
+){
+    @var hasImage = $image == unset || @len($image) == 0 ? false : true;
+    <avatar style="
+         width: $square;
+         height: $square;
+         line-height: $square;
+         display: $display;
+         background-color: $background;
+         border-radius : $radius;
+         box-shadow : $shadow;
+         overflow: $overflow;
+         font-size: $fontSize;
+         text-align: center;
+         color: $color,
+         @out($hasImage ? background-image\: url($image);)
+         background-position: center;
+         background-repeat: no-repeat;
+         background-size: 100% auto;">
+         $icon
+    </avatar>
+}
+
+@mixin CenteredWrapper extends Wrapper(
+    @const $align: center,
+    @const $display : inline-flex
+){}
+
+@mixin Wrapper extends Widget, Listener(
+    $width: 100%,
+    $height: auto,
+    $h_align: left,
+    $position: relative,
+    @const $class : <String>,
+    $children: <Widget>[]
+){
+    <wrapper class="$class" style="
+        display: $display;
+        align-items: $align;
+        text-align: $align;
+        padding: $insets;
+        position: $position;
+        top: $top;
+        right: $right;
+        left: $left;
+        bottom: $bottom;
+        width: $width;
+        height: $height;
+        background-color: $background;
+        color: $foreground;">
+        $children
+    </wrapper>
+}
+
+@mixin Text extends Widget(
+    $text,
+    $font: inherit,
+    $size: 1em,
+    $height: auto,
+    $vertical_align: unset,
+    $color: $super.color.BLACK
+){
+    <text style="
+        display: inline-block;
+        width: $width;
+        height: $height;
+        padding: $insets;
+        background-color: $background;
+        font-family: $font;
+        line-height: $vertical_align;
+        text-align: $align;
+        font-size: $size;
+        border-radius: $radius;
+        backdrop-filter: $backdrop;
+        -webkit-backdrop-filter: $backdrop;
+        color: $color;">
+        $text
+    </text>
+}
+
+@mixin ProgressBar extends Widget(
+    $width: 100%,
+    $default_width: 10%,
+    $height: 5px,
+    $radius: 0.1em,
+    $background: #ddd,
+    $foreground: red
+){
+    <progress-bar style="
+       display: inline-flex;
+       width: $width;
+       height: $height;
+       border-radius: $radius;
+       position: relative;
+       background-color: $background;
+       overflow: hidden;
+    ">
+        <line style="
+            display: inline-block;
+            width: $default_width;
+            height: 100%;
+            background-color: $foreground;
+        ">
+        </line>
+    </progress-bar>
+}
+
+@mixin NULL(){}
+
+@mixin Template extends Widget, RessourceHost(
+    @unset $name : <String>,
+    $module : <Widget>[],
+    $fallback: <Widget>[],
+    $after : <Any>0,
+    $follow : <String>,
+    $children : <Widget>[],
+    $listen: {}
+){
+    <sspa-template sspa-for="$name" 
+                   sspa-follow="$follow" 
+                   sspa-delay="$after"
+                   sspa-event="$listen">
+        $children
+        @module $name{
+            @out($module)
+        }
+        @module failed_$name{
+            @out($fallback)
+        }
+    </sspa-template>
+}
+
+@mixin Ressources(
+    @unset $name : <String>,
+    @unset $content : <Widget>[]
+){
+    @module $name{
+        <sspa-ressource>
+            $content
+        </sspa-ressource>
+    }
+}
+
+@mixin Space extends Widget(
+    $width: 100%,
+    $height: 1em
+){
+    <space style="
+        display: block;
+        width: $width;
+        height: $height;
+    ">
+    </space>
+}
+
+@mixin WidgetBuilder extends Model(){}
+
+@mixin Separator extends Widget(
+    $height: 2px,
+    $width: 100%,
+    $background: #ccc,
+    $radius: 1em
+){
+    <separator style="
+        display: $display;
+        width: $width;
+        height: $height;
+        background-color: $background;
+        border-radius: $radius;
+    "></separator>
+}

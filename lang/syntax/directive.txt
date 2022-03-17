@@ -1,0 +1,9 @@
+import [../../]<nom_fichier|chemin.allant.vers.nom_fichier>
+
+int age = 5
+
+age.on('change', (){
+    print "hello !"
+})
+
+age = 40

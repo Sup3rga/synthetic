@@ -1,0 +1,153 @@
+#nouvelles specifications
+    - export
+    - enlèvement du caractère '@'
+    - enlèvement du mot-clé @var et redéfinition de la syntaxe de déclaration (avec type)
+    - Modification
+        | - import nomfichier from package
+        | + import package.nomfichier
+        | + import nomfichier
+        
+        | + from fichier import module
+        | - from package choose fichier to import module
+        | + from package.fichier import module
+#pre-requis
+// Mercredi 7 Juillet 2021
+    - FileReader
+    - UrlParser
+    - Cursor
+    - moduleDB
+    - sourceCodeDB
+    - compiler
+    - packager
+    - fileAccessChecker
+    - reservedKeys
+    - currModules : >> mixin, module, fn
+    - currVar
+    - EOS
+    - interpretor
+    - debuggin
+    - moduleGrabber
+    - interpretor.import
+    - interpretor.from
+    - interpretor.cls
+    - interpretor.root
+    - interpretor.include
+//Jeudi 7 Juillet 2021
+    - moduleFinder
+    - moduleSaver
+    - interpretor.private
+    - parentScopeFinder
+    - parentScopeList
+    - mixinLegacyManager
+    - interpretor.mixin
+    - interpretor.unused
+    - interpretor.variable
+    - valueFinalizer
+//Samedi 10 Juillet 2021
+    - valueFinder
+    - calculator
+//Dimanche 11 Juillet 2021
+    - indexTransformer
+    - indexExtractor
+//Lundi 12 Juillet 2021
+    - interpretor.external
+    - interpretor.async
+    - lastLine
+//Mardi 13 Juillet 2021
+    - inspector.creatable
+    - inspector.callable
+    - nativeUtils
+    - cast
+    - createEmptyScope
+    - createScope
+    - interpretor.geType
+    - interpretor.getLabel
+    - interpretor.functionCaller
+//Mercredi 14 Juillet 2021
+    - scopePointer
+    - functionBuilder
+    - interpretor.@js
+//Jeudi 15 Juillet 2021
+    - moduleValueIndex
+
+// Mercredi 7 Juillet 2021
+#Les directives
+    #import (x)
+    -- Exemples
+        * import nomfichier
+        * import
+          nomfichier
+        * import nomfichier;
+        * import
+          nomfichier;
+    #from (x)
+    -- Exemples
+        * from file import module
+        * from pkg.file import *
+        * from 
+          file 
+          import ok
+    #include (x)
+        * include fichier
+        * include package.fichier
+
+//Jeudi 8 Juillet 2021
+  #Les mixins
+    -- Exemples
+      mixin nomMixin()
+        out(ok)
+      mixin nomMixin()
+      {
+
+      }
+      private mixin(){
+
+      }
+      unused mixin(){
+
+      }
+      private unused mixin(){
+
+      }
+      mixin nom(
+        const Any $k : "value",
+        final const String $pk : "",
+        $k0 : 50,
+        Number $_err : 100
+      ){
+
+      }
+  #Les variables
+    -- Exemples
+        - $variable : Any
+        - $variable : String = "Hello !"
+        - $variable 
+          : Number = 50
+        - $fn : Any = (){
+            @js
+            console.log('[ok]')
+          }
+
+          Array<Number>
+  #Les fonctions
+    -- Exemples
+        - fn nomFn(){
+
+        }
+        - fn nomFn(Any arg : "val"){
+
+        }
+        - fn nomFn() : Any{
+          
+        }
+//Vendredi 9 Juillet 2021
+  #Les modifications de valeurs
+    -- Exemples
+         - $ko = 5
+         - $variable ++
+         - $variable += 50
+         - $variable = 5 + 20
+         - $ok = 4 + !$k * 2 && $ok 
+         // [4, +, !, $k, *, 2, &&, $ok] -> 
+            [4, +, __, false, *, 2, &&, $ok] ->
+            [4, +, __, __, __, false, &&, $ok]

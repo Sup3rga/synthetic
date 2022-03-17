@@ -1,0 +1,40 @@
+//Test des structures répétitives et conditionnelles
+
+//For
+for i test 0 to 50 { //@corriger : ce syntax devrait soulever une alerte
+    print i
+}
+
+
+JSON tk = {
+    ok : bien
+}
+
+loop(tk){
+    print i + " - " + j
+}
+
+//IF - ELIF - ELSE
+
+nom = tap("Votre nom : ")
+
+Number age = int tap(Votre age)
+
+print "Bonsoir " + nom
+
+if age < 18 {
+    print "Vous êtes mineur"
+}
+elif age < 40 {
+    print "Vous êtes adulte"
+}
+else
+    print "Vous êtes vieu !"
+
+//Ajout de switch
+
+switch age {
+    case 1|2|3:
+        print "Bonjour"
+    break;
+}

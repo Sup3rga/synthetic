@@ -1,0 +1,91 @@
+
+import module
+
+tab = [ module . Span () ]
+
+//module . ReactDom ("Cool", [ module . Span (), module . Span () ])
+
+
+private class Person{
+    protected String nom = "Ok"
+    private Number age = 0
+    private static Number total = 0
+
+    Person (String nom : "bien", Number age : 0){
+        //print "{instanciation}"
+        this.nom = nom;
+        this.age = age;
+        total++
+    }
+
+    String getNom()
+        return this.nom
+
+    String cool(String nom : "Le monde")
+        print "Bonjour " + this.nom + " ! "
+
+    setNom(String _nom)
+        this.nom = _nom;
+
+    String toStr()
+        return "[Présentation] Je m'appelle " + this.nom + " j'ai " + this.age
+
+    static Number getTotal()
+        return total
+
+    abstract test();
+}
+
+class Ingenieur extends Person{
+    String test(){
+        print "Ok"
+    }
+
+    override String toStr(){
+        return "Quoi de neuf docteur " + nom + " !"
+    }
+}
+
+
+class Test<T : String, S : Boolean>{
+    T ok;
+    Number ts = 0;
+    static Number total = 0;
+
+    Test(T _ok){
+        T pk = 20;
+        this.ts++
+        this.ok = _ok
+    }
+
+    T getOk(){
+        return ok
+    }
+
+    String toStr()
+        return "Hi ! " + ok
+
+    static setTotal(Number t){
+        total = t
+    }
+
+    static printTrace(S real){
+        print real ? "Boof !" : "NOO ! " + total
+    }
+}
+
+
+Test t = Test<Number>(_ok : 50)
+
+t . printTrace false
+
+print "cool"
+
+mod . Hi "ok"
+
+print "tranquille !"
+
+vk = mod . sayHi "Synthetic"
+
+print "[VK] " + vk
+*/

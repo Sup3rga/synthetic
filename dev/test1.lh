@@ -1,0 +1,75 @@
+//Test des variables
+Number nbr = 4 //@ok
+call //@ok
+String nom = "hello" //@ok
+Number neg = -4 //@corriger : accepter les nombres négatifs //@ok : corrigé
+//Number total = "cent" //@ok : génère une erreur
+Array<Boolean> fn = (){ //@corriger: le typeData n'est pas correct ! //@ok : corrigé
+    return false
+}
+//String<Number> ok = "50" //@ok : génère
+
+//Assignation
+call = 50 //@ok
+//nbr = "bien" //@ok : génère une erreur
+//fn = 40 //@ok : génère une erreur [ on ne peut pas redéclarer une fonction ]
+nom = ["ok"] //@corriger : on ne devrait pas pouvoir caster un Array en String //@ok : corrigé
+
+//Structure
+//Array t = 50 //@ok : génère une erreur
+Array t = [] //@ok
+Array v = [1,2,4] //@ok
+//Array<Number> s = ["hello", "world"] //@ok : génère une erreur
+//v = "Ok" //@ok : génère une erreur
+Array<Number> tab = [1,2,3,4]
+//push(tab, 'bien') //@ok : génère une erreur
+tab = [1,'cool',3] //@corriger : empêcher tout réécriture ne vérifiant pas les contraintes d'intégrités //@ok : corrigé
+//Array<Number> tab2 = [1,2,3,[4,5],6] //@ok
+Array<...,Number> tab2 = [1,2,3,[4,5],6] //@ok
+//Array<Number,...> tab2 = [1,2,3,[4,5],6] //@ok : génère une erreur
+
+JSON _dict = {} //@corriger: elever les valeurs null comme clé //@ok : corrigé
+
+/*
+JSON<String,Number> _pers = { //@ok : génère une erreur
+    nom : "Pierre",
+    prenom: "Josué"
+}
+*/
+
+JSON<Number|String, String> _pers2 = { //@ok
+    nom: "Jean",
+    prenom: "Henry"
+}
+/*
+JSON<String> _pers3 = { //@ok
+    p1: "Julien",
+    group: {
+        p1: "Jean"
+    }
+}
+*/
+
+JSON<String,...> _pers3 = { //@ok
+    p1: "Julien",
+    group: {
+        p1: "Jean"
+    }
+}
+
+
+/*
+ les modes d'assignation
+
+ a = 5 //contrainte de type
+
+ a[i] = 5 //contrainte de valeur
+
+ test(
+    a : 3 //contrainte de type
+ ){
+   return r contrainte de type
+ }
+
+ test(a : 4) contrainte de type
+*/

@@ -1,0 +1,13 @@
+@import "compass/css3";
+
+//---- GUI Colors -----
+$main-color: rgb(25, 150, 129);
+$default-bg: rgb(211, 211, 228);;
+$default-shadow-color: #aaa;
+
+@mixin simple_background($url){
+    background-image: url($url);
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: auto 100%;
+}

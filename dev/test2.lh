@@ -1,0 +1,110 @@
+/*
+//test des functions
+nomFonction(){ //@ok
+    print "Hello"
+}
+nomFonction2()
+    print "Coucou"
+
+//les arguments
+nomFonction3(String nom : "Jean")
+    print "Bonjour " + nom
+*/
+tester(){
+    return "cool";
+}
+
+String test = "Ok"
+
+//@nouveauté : les arguments avec contrainte de valeur
+nomFonctionAvecContrainte(Array<String> nom : [test, tester()]){
+    String noms = ""
+    for i , j in nom {
+        noms += j
+    }
+    print noms
+}
+
+//------------
+
+Number tester(){
+    return 8;
+}
+
+Number test = 5
+
+//@nouveauté : les arguments avec contrainte de valeur
+nomFonctionAvecContrainte(
+    Array<...,Number> data : [],
+    JSON<String,Number> note : {}
+){
+    print note
+}
+
+nomFonctionAvecContrainte(
+    data : [1,2,[1,3]],
+    note : {
+        cool: 0
+    }
+);
+
+nomFonctionAvecContrainte(
+    Array<String> data : []
+){
+    print "Voic les noms que vous avez tapés !"
+    for i, j in data {
+        print "Nom [ "+ i + " ] " + j
+    }
+}
+
+noms = []
+Boolean go = true
+
+while go {
+    push(noms, tap("Entrez un nom"))
+    go = (lower(tap("Voulez-vous continuer ? O/n")) == 'o' ? true : false)
+}
+
+nomFonctionAvecContrainte(noms);
+
+//2 -----
+
+
+withCallback(Function tk : (ps : (){ print "Cooler !" } ){
+    k = 8
+    ps()
+    print "Ok : " + k
+}){
+    k = 7
+    tk()
+    print "Inside : " + k
+}
+
+
+Function nom(){
+    print "Oui !"
+    variable = 5
+    return (){
+        print "Bouffon " + variable + " with " + peca + " ! "
+    }
+}
+
+other = nom()
+
+peca = "Moon"
+
+other()
+
+//withCallback(nom);
+
+nom(){
+    print "ok"
+}
+
+nom()
+
+override nom(){
+    print "Bah !"
+}
+
+nom()

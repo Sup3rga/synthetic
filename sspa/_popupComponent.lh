@@ -1,0 +1,289 @@
+@include _widget;
+@from _extraComponent import Wrapper;
+@from _form import Button, Form;
+
+@unused mixin Popup extends Widget(
+    @const $position: absolute,
+    $header,
+    $background : #fff,
+    $width : 20%,
+    $height: auto,
+    $top: 50px,
+    $right: 0,
+    $opacity: 0,
+    $level : 2,
+    $transform: translate3d(0,0,0),
+    $bottom: unset,
+    $shadow : 0 3px 8px 0 #555,
+    $left: unset,
+    $display : none,
+    $actions: <PopupButton>[],
+    $actions_alignment : right,
+    $list : <MenuList>
+){}
+
+@mixin PopupMenuHeader extends Widget(
+    $insets: .5em 0 1em 0,
+    @const $display: inline-block,
+    @const $align : center,
+    $width : 100%,
+    $height: auto,
+    $lineRadius : 4em,
+    $lineHeight: 9px,
+    $lineWidth: 30%,
+    $background : #ccc
+){
+    <popupmenu-header style="
+        display: $display;
+        text-align: $align;
+        width: $width;
+        height: $height;
+        padding: $insets;
+    ">
+        <line style="
+            display: inline-block;
+            width: $lineWidth;
+            height: $lineHeight;
+            background-color: $background;
+            border-radius: $lineRadius;
+        "></line>
+    </popupmenu-header>
+}
+
+@mixin PopupButton extends Button(
+    $text,
+    $class,
+    $light : true,
+    $autoClosePopup: true,
+    @unset $choice : <Any>,
+    @const $attr : {
+        sspa-choice : $choice,
+        class : @out($autoClosePopup ? history-back)
+    }
+){}
+
+@private unused mixin _DraggablePopupMenuBodyArgs(
+    $maxValue: "auto",
+    $boxName: <String>,
+    $boxHeight: 16%,
+    $boxRadius: 1.3em 1.3em 0 0
+){} 
+
+@private mixin DraggablePopupMenuBody extends OpenPopupMenu, DragThenScroll, Popup, _DraggablePopupMenuBodyArgs(
+    @const $top : unset,
+    @const $bottom: 0,
+    @const $width: 100%,
+    @const $display: inline-block,
+    @const $opacity: 1,
+    @const $left: 0,
+    @const $heightOnly: true,
+    @const $name : $boxName,
+    @const $radius: $boxRadius,
+    @const $height: $boxHeight,
+    @const $header : @use PopupMenuHeader()
+){}
+
+@mixin DraggablePopupMenu extends AbsolutePopupMenu, _DragThenScrollArgs, _DraggablePopupMenuBodyArgs(
+    @const $modalBox : @use DraggablePopupMenuBody(
+       $background : $background,
+       $level : $level,
+       $style: $viewStyle,
+       $attr : $viewAttr,
+       $shadow : $shadow,
+       $list : $list,
+       $boxName : $boxName,
+       $actions: $actions,
+       $boxHeight: $boxHeight,
+       $maxValue: $maxValue,
+       $boxRadius: $boxRadius,
+       $toVertical: $toVertical,
+       $releaseTime: $releaseTime,
+       $parentLevel: $parentLevel,
+       $applyToParent: $applyToParent
+   )
+){}
+
+@mixin PopupMenuBody extends Popup(){
+    <popup-menu style="
+        position: $position;
+        display: $display;
+        width: $width;
+        height: $height;
+        opacity: $opacity;
+        z-index: $level;
+        top: $top;
+        left: $left;
+        transform : $transform;
+        box-shadow : $shadow;
+        background-color: $background;
+        color : $color;
+        border-radius: $radius;
+        bottom: $bottom;
+        padding: $insets;
+        right: $right;
+    ">
+       $header
+       <content style="
+         display: inline-block;
+         width: 100%;
+         height: 80%;
+       ">
+        $list
+       </content>
+       @out(@len($actions) ?
+           @use Form(
+               $style : {
+                 width: 100%,
+                 text-align: $actions_alignment,
+               },
+               $children : $actions
+           );
+       )
+    </popup-menu>
+}
+
+@private mixin CustomPopupBody extends PopupMenuBody(
+    $children : <Widget>[],
+    @const $list : @use Wrapper(
+        $attr: {
+            class : popup-actions
+        },
+        $children : $children
+    )
+){}
+
+@mixin AbsolutePopupMenu extends Popup, Overlay(
+    $maskBackground: rgba(0,0,0,0.1),
+    $maskTop: 50px,
+    $viewStyle : {},
+    $viewAttr : {},
+    $radius: .4em,
+    $persistent: false,
+    @const $modalBox : @use PopupMenuBody(
+                          $background : $background,
+                          $width : $width,
+                          $height: $height,
+                          $top: $top,
+                          $right: $right,
+                          $opacity: 1,
+                          $style: $viewStyle,
+                          $attr: $viewAttr,
+                          $level : $level,
+                          $bottom: $bottom,
+                          $shadow : $shadow,
+                          $insets: $insets,
+                          $left: $left,
+                          $radius: $radius,
+                          $display : inline-block,
+                          $list : $list,
+                          $name : $name,
+                          $actions: $actions
+                      )
+){
+    <popup-wrapper style="
+        display: $display;
+        position: $position;
+        top: 0;
+        opacity: $opacity;
+        z-index: $level;
+        bottom: 0;
+        width: 100%;
+        overflow: hidden;
+        left: 0;
+    " data-name="$name">
+        <popup-mask class="@out(!$persistent ? history-back)" style="
+            display: inline-block;
+            position: $position;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+            left: 0;
+            background : $maskBackground;
+        ">
+        </popup-mask>
+        $modalBox
+    </popup-wrapper>
+}
+
+@mixin PopupMenu extends Popup, Overlay(
+    $viewStyle : {},
+    $viewAttr : {}
+){
+    @use PopupMenuBody(
+       $background : $background,
+       $width : $width,
+       $height: $height,
+       $top: $top,
+       $right: $right,
+       $radius: $radius,
+       $opacity: $opacity,
+       $level : $level,
+       $style: $viewStyle,
+       $attr : $viewAttr,
+       $bottom: $bottom,
+       $shadow : $shadow,
+       $left: $left,
+       $display : $display,
+       $list : $list,
+       $name : $name,
+       $actions: $actions
+   );
+}
+
+@mixin OpenPopupMenu extends Popup(
+    @const $display: inline-block,
+    @const $opacity: 1,
+    $list : <Widget>
+){
+    @use CustomPopupBody(
+       $background : $background,
+       $width : $width,
+       $height: $height,
+       $top: $top,
+       $right: $right,
+       $radius: $radius,
+       $opacity: $opacity,
+       $level : $level,
+       $style: $viewStyle,
+       $attr : $viewAttr,
+       $bottom: $bottom,
+       $shadow : $shadow,
+       $left: $left,
+       $header : $header,
+       $display : $display,
+       $children : $list,
+       $name : $name,
+       $actions: $actions
+   );
+}
+
+@mixin DialogBox extends AbsolutePopupMenu(
+    $children : <Widget>[],
+    $viewStyle : {},
+    $viewAttr : {},
+    $transform : translate3d(-50%, -50%, 0),
+    $top : 50%,
+    $left: 50%,
+    @const $modalBox : @use CustomPopupBody(
+                          $background : $background,
+                          $color : $color,
+                          $width : $width,
+                          $height: $height,
+                          $top: $top,
+                          $right: $right,
+                          $opacity: 1,
+                          $insets: $insets,
+                          $style: $viewStyle,
+                          $attr : $viewAttr,
+                          $level : $level,
+                          $bottom: $bottom,
+                          $shadow : $shadow,
+                          $radius: $radius,
+                          $left: $left,
+                          $transform: $transform,
+                          $display : inline-block,
+                          $children : $children,
+                          $name : $name,
+                          $actions: $actions
+                      )
+){}

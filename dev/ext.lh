@@ -1,0 +1,41 @@
+//Ok
+
+Any variable = 39;
+
+
+slimPhase 1 default
+
+Number k = 6
+
+Function ok = (){
+    console.log("ok")
+    print "cool"
+}
+
+
+
+mixin ok(
+   String<Stanp> name : "bien"
+){
+    <span class="ok">
+        <html class="${ len (bien)}"></html>
+    </span>
+    <? 
+        if 5 < 10 {
+            print "cool"
+            console.log("Ok")
+        }
+    ?>
+}
+
+export JSON<String, Number> k7 = {
+    hoe: "cool",
+    pk: "bah !",
+    cent : true
+}
+for i in [1,2,3,4] {
+    
+}
+if k < 6 {
+    print "Ok"
+}

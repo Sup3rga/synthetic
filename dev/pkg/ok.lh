@@ -1,0 +1,55 @@
+import ..module
+
+export sePresenter(
+    String nom : "Inconnu",
+    String prenom: "Inconnu",
+    Number age : 0
+){
+    print "================== Présentation ====================="
+    print "Votre nom            : " + nom
+    print "Votre prénom         : " + prenom
+    print "Votre age            : " + age
+    print "Votre statut civique : " + (age < 18 ? mineur : majeur)
+}
+
+export cooler(){
+    print "Bonjour !"
+}
+
+mixin Metier extends module.Act, module.Design(
+    Array<String> list : ["template"]
+){
+
+    <ul>
+    <?
+        for i in list{
+            ?>
+            <li>${i}</li>
+            <?
+        }
+    ?>
+    </ul>
+    <div click: external(){
+        console.log('[Cooler]')
+    } eventoverride=true>
+        class
+    </div>
+}
+
+mixin Personne(
+    String pk : "bien",
+    Array<Span> spans : [],
+    Metier metier : Metier()
+){
+    <span>
+        ${pk}
+        <?
+            for i in spans{
+                ?>
+                ${i}
+                <?
+            }
+        ?>
+        ${metier}
+    </span>
+}

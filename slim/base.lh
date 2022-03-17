@@ -1,0 +1,89 @@
+unused mixin Selectable(
+    String name : ""
+){
+    @MixinActing
+    {
+        applyToChildren: true,
+        attr: {
+            name
+        }
+    }
+}
+
+unused mixin Widget(
+    String display: "inline-block",
+    String position: "static",
+    String top: "unset",
+    String overflow: "unset",
+    String left: "unset",
+    String bottom: "unset",
+    String right: "unset",
+    String background: "unset",
+    String width: "inherit",
+    String height: "inherit",
+    String foreground: "#000",
+    String color: "#000",
+    String vAlign: "top",
+    String hAlign: "left",
+    String radius: "0",
+    String insets: "0",
+    String image: "unset",
+    String backdrop: "unset",
+);
+
+mixin ImplementedWidget extends Widget(
+    JSON<String, String|Number> style : {}
+){
+    @MixinActing
+    {
+        applyToChildren: true,
+        style : {
+            display,
+            position,
+            top,
+            overflow,
+            left,
+            right,
+            background,
+            backdropFilter,
+            width,
+            height,
+            foreground,
+            color,
+            verticalAlign: vAlign,
+            textAlign: hAlign,
+            borderRadius: radius,
+            padding: insets,
+            backgroundImage: image
+        } + style
+    }
+}
+
+unused mixin Listener(
+    JSON<String,External> event:{}
+){
+    @MixinActing
+    {
+        event
+    }
+}
+
+unused mixin Stylable(
+    JSON<String> style : {}
+){
+    @MixinActing
+    {
+        style
+    }
+}
+
+unused mixin Container<T : Widget> extends Widget(
+    Array<T> children : [],
+    T child
+){
+    <? 
+        if len(children) && len(child) {
+            raise "arguments [ children ] and [ child ] can't be assigned simultanously !"
+        }
+    ?>
+}

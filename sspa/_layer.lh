@@ -1,0 +1,261 @@
+@include _widget;
+@include _tabComponent;
+@from _extraComponent import Text, Icon, Wrapper;
+@include _menuComponent;
+@include _popupComponent;
+
+@unused mixin Header extends Widget(
+    $title : My application,
+    $with_shadow: true,
+    $shadow_color: #777,
+    $has_back : false,
+    $has_menu : false,
+    $height : 50px,
+    $background: $theme,
+    $align : left,
+    $rounded: false,
+    $radius: 1.2em,
+    $icons: <Icon>[],
+    $hasTab: false,
+    $headTab: <HeadTab>
+){
+   <sspa-metadata type="appbar">@out({rounded : $rounded, radius : "$radius", height: "$height"})</sspa-metadata>
+}
+
+@mixin AppBar extends Header(
+    $customized: false,
+    $customChild: <Wrapper>
+){
+    <appbar class="@out($ios || $hybrid ? ios-style) @out($rounded ? rounded) @out($hasTab ? with-tab)"
+            style="@out($with_shadow ? box-shadow \: 0 0 4px 0 $shadow_color;) background-color: $background; color: @out(!$automaticColor || @SSPA.hasContrast($background, $foreground) ? $foreground : @SSPA.contrastColor($background));">
+        <appbar-wrapper style="height: $height;">
+            <icon-space class="super super-l2" style="@out(!$has_back && !$has_menu ? display \: none;)">
+                @use Icon(
+                    $color: @out(!$automaticColor || @SSPA.hasContrast($background, $foreground) ? $foreground : @SSPA.contrastColor($background)),
+                    $class: $has_menu ? bars : arrow-left,
+                    $attr : {
+                        class : "super super-l12 float-btn rounded @out(!$has_menu ? history-back : process)",
+                        "layer-target" : "menu"
+                    }
+                );
+            </icon-space>
+            <space class="super" style="@out(!$ios ? display : none;)"></space>
+            @if($customized){
+                @out($customChild)
+            }
+            @else{
+                @var nbr_icons = @len($icons);
+                @out(
+                    <titlebar class="super">
+                        $title
+                    </titlebar>
+                    <icon-space class="super actions">
+                    $icons
+                    </icon-space>
+                )
+            }
+        </appbar-wrapper>
+        @out(@len($headTab) ? $headTab)
+    </appbar>
+}
+
+@mixin Center extends View(
+    $foreground : "#333",
+    @const $is_flex : true,
+    @const $flex_align : center,
+    @const $align : center,
+    $children : <Widget>[]
+){}
+
+@mixin Page extends Widget, Listener(
+    $children: <Widget>[],
+    $centered: false,
+    $scrollable : false
+){
+    <page class="swiper-slide" style="@out($centered ? display\: inline-flex; align-items\: center)">
+        <content style="padding: $insets;" class="@out($scrollable ? scrollable-y)">
+           $children
+        </content>
+    </page>
+}
+
+@mixin SubLayer extends Widget, ParentAccess(
+    @const $accessStyle: {
+        position: relative,
+        height : 100%,
+        overflow: hidden
+    },
+    $metric: "%",
+    $header : <Widget>,
+    $headerName : <String>,
+    $bodyName : <String>,
+    $body : <Widget>,
+    $rounded : false,
+    $headHeight : <Number>10,
+    $bodyBackground: #fff,
+    $radius: 1em,
+    $scrollable : true,
+){
+    @out(<wrapper style="
+        display: inline-block;
+        height : 100%;
+        width : 100%;
+        padding: $insets;
+        overflow: hidden;
+        background: $background;
+    " data-name="$name">
+        <wrapper style="
+            display : inline-block;
+            width: 100%;
+            height : $headHeight$metric;
+            background-color: $background;
+            overflow: hidden;
+        " data-name="$headerName">
+            $header
+        </wrapper>
+        <wrapper style="
+            display : inline-block;
+            width: 100%;
+            height : @out(98 - $headHeight)$metric;
+            background-color: $bodyBackground;
+            overflow: hidden;
+            position: relative;
+            @out($scrollable ? overflow-y \: auto;)
+            border-radius: @out($rounded ? $radius; : 0px;)
+        " data-name="$bodyName">
+            $body
+        </wrapper>
+    </wrapper>)
+}
+
+@mixin SwiperWrapper extends Widget(
+    $id,
+    @const $width : 100%,
+    $height : 200px,
+    $children : <Widget>[]
+){
+   <swiper-container swiper-id="$id" class="swiper-container"
+        style="
+            display: $display;
+            width : $width;
+            height: $height;
+            background-color : $background;
+            border-radius: $radius;
+        "
+    >
+        $children
+    </swiper-container>
+}
+
+@mixin Swiper extends View(
+    @const $content : <swiper-container swiper-id="$swiperId" class="swiper-container"
+                        data-swipe-touchable="$touchable"
+                        data-swipe-duration="$transitionDuration">
+                           $children
+                       </swiper-container>,
+    @const $scrollable : false,
+    @const $supplementClass : "swiper-container",
+    $touchable: true,
+    $transitionDuration: 400,
+    $children : <Page>[],
+    $swiperId: <String>
+){}
+
+@mixin View extends Listener, Widget(
+    @const $content : "<content class="super super-l12 @out($scrollable ? scrollable-y @out($ios || $hybrid ? ios-style))" style="padding: $insets">
+                          $children
+                      </content>",
+    $is_flex : false,
+    $flex_align : flex-start,
+    $align : left,
+    $children : <Widget>[],
+    $scrollable: false,
+    $insets: 5px .1em
+){
+    @var v_align = flex-start;
+    @if($flex_align == flex-start || $flex_align == top || $flex_align == start){
+        $v_align = flex-start;
+    }
+    @elif($flex_align == center){
+        $v_align = center;
+    }
+    @elif($flex_align == end || $flex_align == bottom){
+        $v_align = flex-end;
+    }
+    <view style="background-color : $background;
+                 overflow: hidden;
+                 backdrop-filter: $backdrop;
+                 -webkit-backdrop-filter: $backdrop;
+                 color: $foreground;
+                 align-items: @out($v_align;)
+                 @out($is_flex ? display\: inline-flex\;)
+                 text-align : $align;">
+        $content
+    </view>
+}
+
+@mixin Menu extends Widget(
+    $persistent : false,
+    $header : <MenuHeader>,
+    $footer : <Footer>,
+    $scrollable: false,
+    $width: 70%,
+    $background: #fff,
+    $body : <MenuList>@use Wrapper(
+        $position: absolute,
+        $top: 0,
+        $left: 0,
+        $bottom: 0,
+        $right: 0
+    )
+){
+    <menu persistent=$persistent style="width: $width">
+        <panel class="@out($scrollable ? scrollable-y)" style="background-color: $background;">
+            $header
+            $body
+            $footer
+        </panel>
+    </menu>
+}
+
+@mixin Layer extends Widget, Listener(
+    $persistent : false,
+    $id : "",
+    $appbar : <Header>@use AppBar(),
+    $view : <View>@use Center(
+        $children : [ @use Text("Hello World !", $align: center) ]
+    ),
+    $footbar : <FootBar>,
+    $menu : <Menu>,
+    $background: #fff,
+    $floatButtons : <FloatWrapper>,
+    $popupMenu : <Popup>[]
+){
+    @out(<layer  persistent=$persistent id="$id" style="
+        background-image: @out($image == unset ? unset : url($image);)
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: auto 100%;
+        background-size: cover;
+        background-color: $background;
+    ">
+        <hidden-part>
+            $menu
+        </hidden-part>
+        <visible-part>
+            $appbar
+            $view
+            $footbar
+            $floatButtons
+            $popupMenu
+        </visible-part>
+    </layer>)
+}
+
+@mixin FootBar extends Widget(
+    $child: <HeadTab>
+){
+    <footbar style="background-color : $background; color: $foreground;">
+        $child
+    </footbar>
+}

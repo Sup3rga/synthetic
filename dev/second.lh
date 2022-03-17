@@ -1,0 +1,5 @@
+import module
+
+//module.ok = 70
+print module.sayHi("Synthetic")
+print module.ok

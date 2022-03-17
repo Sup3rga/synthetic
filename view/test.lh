@@ -1,0 +1,89 @@
+from ..slim.* import *
+from theme import *
+
+JSON<String,...> rules = {
+    _color: contrastColor(theme.mainColor),
+    header: {
+        background: theme.mainColor
+    }
+};
+
+Array<Item> itemBuilder(JSON data){
+    Array<Item> r = []
+    loop data {
+        push(r, Item(
+            color : rules._color,
+            icon  : icon,
+            text  : text,
+            style:{
+                padding: '0 1em'
+            }
+        ))
+    }
+    return r
+}
+Layer(
+    appbar : AppBar(
+        title : "Slim",
+        hasMenu : true,
+        style: {
+            backgroundColor: theme.mainColor
+        },
+        menuIconActions : {
+            click: external(){
+                console.log('Menu')
+            }
+        },
+        actions : [
+            Icon('more', event: {
+                click: external (){
+                    console.log('[MORE]')
+                }
+            }),
+            Icon('bell', event: {
+                click: external (){
+                    console.log('[BELL]')
+                }
+            })
+        ],
+        tab: Tab(
+            lineColor: rules._color,
+            children: itemBuilder({
+                0 : {
+                    icon : "home",
+                    text : "Accueil"
+                },
+                1: {
+                    icon : 'sms',
+                    text : 'Boite de messages'
+                },
+                2: {
+                    icon: 'users',
+                    text: 'Contacts'
+                },
+                3: {
+                    icon: 'phone',
+                    text : 'Appels'
+                }
+            })
+        )
+    ),
+    body: View(
+        style: {
+            paddingTop: '50px',
+            display: flex,
+            alignItems: center
+        },
+        children : [
+            Wrapper(
+                style: {
+                    display: block,
+                    width: '100%',
+                    textAlign: center,
+                    fontFamily: 'Roboto'
+                },
+                child: Text("Hello world !")
+            )
+        ]
+    )
+)

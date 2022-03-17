@@ -1,0 +1,23 @@
+import base
+import component
+
+mixin View extends base.Widget, base.Stylable, base.Container<Widget>(
+    Boolean scrollable: false,
+    String insets: "5px .1em"
+){
+    <? 
+        Boolean ios = (platform() == 'ios')
+        Array list = (len(children) ? children : [child])
+    ?>
+    <view>
+        <content class="super super-l12" style="padding: ${insets}">
+        <? 
+            for i in list {
+                ?> 
+                ${i}
+                <?
+            }
+        ?>
+        </content>
+    </view>
+}

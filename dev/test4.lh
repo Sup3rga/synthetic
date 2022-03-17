@@ -1,0 +1,216 @@
+//Test de try ... catch
+
+
+Number k = 6
+try{
+    k = 8
+}catch(e) {
+    print "cool"
+}
+
+print k
+
+//Test Mixin
+
+//En-tete
+mixin nomMixin
+mixin nomMixin extends nomMixin2
+mixin nomMixin extends nomMixin2, nomMixin3
+
+mixin nomMixin(
+    final const Array<String> name : []
+){
+
+}
+
+<div class="super super-l12">
+    <span>Hello world</span>
+    <span>Bonjour le monde</span>
+</div>
+
+//------------------------------------------
+
+private mixin Test(
+    final unset Array<String> nom : ["Ok"],
+    JSON<String, External> event : {
+        click: external (){
+            console.log('[Ok]')
+        }
+    }
+){
+    <span class="salut">
+        <ul>
+        <?
+        for i,j in nom {
+           print "Iteration-" + i
+           ?> <li>${j}</li> <?
+        }
+        ?>
+        </ul>
+    </span>
+}
+/*
+*/
+
+//Gérer le probleme de scope
+Test(nom : ["Bien", "Cool", "Bonbon", "Sucre"]);
+
+print "Ok"
+
+//---------------
+
+
+mixin List(
+    Array<String> element : ["Ok"],
+    JSON<String, External> event: {
+        click : external(){
+            console.log('[Ok]')
+        }
+    }
+){
+    <span style="padding: 1em; display: block">
+        //type: event, style, attr, watch, dragThenScroll, parentAccess
+        <?
+        for i,j in element{
+          ?>
+          <span style="
+            display: inline-block;
+            width: 100px;
+            height: 100px;
+            border-radius: 8px;
+            margin: 4px;
+            border: 1px solid #aaa
+          ">
+            <slimAction type="event" content=${event}>
+            <span style="
+                display: block;
+                height: 60px;
+                text-align: center;
+                line-height: 80px;
+                font-size: 31px;
+                font-family: 'Ubuntu mono'
+            ">${i}</span>
+            <span style="
+                display: block;
+                height: 40px;
+                line-height: 40px;
+                text-align: center;
+                font-family: lato
+            ">${j}</span>
+          </span>
+          <?
+        }
+        ?>
+    </span>
+}
+
+List(
+    element : [
+        "Mais", "Pois","Riz","Sucre","Farine","Pain",
+        "Avoine", "L'huile"
+    ]
+)
+
+//-----------------
+
+
+/*
+mixin Head extends Actions(
+    String height : 10vh,
+    String backgroundColor : green,
+    String headText: "Hello"
+){
+    <span>
+        ${headText}
+    </span>
+}
+
+mixin List extends Head, Actions(
+    Array<String> el : [],
+    backgroundColor: yellow,
+){
+    <span>
+        <ul>
+            <?
+            for i in el {
+                timer((){
+                    ?>
+                    <li style="padding: 1em; margin: .2em; background: #ddd;"
+                        click : external (e,f){
+                            console.log('[Ok]',f);
+                        }
+                    >
+                    ${i}
+                    </li>
+                    <?
+                }, 500);
+            }
+            ?>
+        </ul>
+    </span>
+}
+List(["Accueil", "Messagerie"])
+*/
+
+//--------------------------------------------
+
+
+unused mixin Actions(
+    String width: 100vw,
+    String height: 50vh,
+    String display: block,
+    String backgroundColor: red,
+    final String id : "ok"
+){
+    @MixinActing
+    {
+        parentLevel: [],
+        applyToChildren: true,
+        style: {
+            width,
+            height,
+            backgroundColor,
+            display
+        },
+        event : {},
+        attr: {
+            id
+        }
+    }
+}
+
+mixin Head extends Actions(
+    String height : 10vh,
+    String backgroundColor : green,
+    String headText: "Hello"
+){
+    <span>
+        ${headText}
+    </span>
+}
+
+mixin List extends Head, Actions(
+    Array<String> el : [],
+    backgroundColor: yellow,
+){
+    <span>
+        <ul>
+            <?
+            for j,i in el {
+                timer((){
+                    ?>
+                    <li style="padding: 1em; margin: .2em; background: #ddd;"
+                        click : external (e,f){
+                            console.log('[Ok]',f);
+                        }
+                    >
+                    ${i}
+                    </li>
+                    <?
+               }, 5000);
+            }
+            ?>
+        </ul>
+    </span>
+}
+List(["Accueil", "Messagerie","Services"])

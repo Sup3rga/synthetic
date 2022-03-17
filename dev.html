@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="css/fonts.css">
+    <link rel="stylesheet" href="css/slim.css">
+    <link rel="stylesheet" href="css/super.css">
+    <style>
+        body{
+            background-color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <slim-app></slim-app>
+    <script>
+        var tester = "Bonjour !";
+        function bizar(){
+            return 50;
+        }
+    </script>
+    <script src="js/synthetic-7.async.js"></script>
+    <script>
+        var compile = new Synthetic('./', true);
+        var date = new Date().getTime(), d2;
+        // t1 = performance.now(), t2;
+        var e = compile.compileFile('dev.main');
+        d2 = new Date().getTime();
+        // t2 = performance.now();
+        // console.log('[CODE]',e.code);
+        console.log('[Time]', d2 - date, '/');
+    </script>
+</body>
+</html>

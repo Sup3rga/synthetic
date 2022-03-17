@@ -1,0 +1,460 @@
+@import "compass/css3";
+
+slim-app{
+    display: block;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+}
+/*part*/
+hidden-part, visible-part{
+    display: block;
+    position: absolute;
+    top: 0;
+    z-index: 1;
+    bottom: 0;
+    width: 100%;
+}
+hidden-part{
+    z-index: 2;
+    @include transform(translate3d(-100%,0,0));
+}
+icon.rounded{
+    width: 1.8em;
+    line-height: 1.9em;
+    height: 1.8em;
+    overflow: hidden;
+    @include border-radius(100%);
+}
+appbar{
+    height: 50px;
+    background-color: #fff;
+    position: absolute;
+    top: -1px;
+    display: flex;
+    flex-direction: column;
+    left: 0;
+    width: 100%;
+    z-index: 2;
+    &.with-tab{
+        height: 98px;
+    }
+    appbar-wrapper{
+        display: inline-flex;
+        width: 100%;
+        height: 50px;
+        padding: .3em;
+        align-items: center;
+        icon-space.actions{
+            display: inline-flex !important;
+            flex-direction: row-reverse;
+            align-items: center;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+    }
+    &.rounded{
+        z-index: 1;
+        height: 50%;
+    }
+    &.shadow{
+        @include box-shadow(0 1px 2px 0 #333);
+    }
+    logo{
+        width: 2em;
+        height: 2em;
+    }
+    text,titlebar{
+        padding: .3em;
+        font-size: 1.2em;
+        font-family: Poppins-Bold;
+    }
+    titlebar{
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    &.ios-style{
+        text,titlebar{
+            text-align: center;
+        }
+        icon{
+            cursor: pointer;
+        }
+    }
+    &.transparent{
+        icon.float-btn{
+            background-color: rgba(255,255,255,0.7);
+        }
+    }
+}
+view{
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    bottom: 0;
+    content{
+        position: relative;
+        height: auto;
+        max-height: 100%;
+        overflow: hidden;
+        padding: 55px .1em;
+        &.scrollable{
+            overflow-y: auto;
+            &.ios-style{
+                overflow-y: hidden;
+            }
+        }
+    }
+}
+
+icon{
+    font-size: 1.6em;
+    text-align: center;
+}
+wrapper{
+    display: inline-block;
+    padding: .1em;
+    position: relative;
+}
+avatar{
+    height: 2em;
+    width: 2em;
+    color: $default-bg;
+    background-color: $main-color;
+    overflow: hidden;
+    icon{
+        color: $default-bg;
+        text-align: center;
+    }
+    &, picture{
+        @include border-radius(100%);
+    }
+}
+logo{
+    width: 5em;
+    height: 5em;
+    background-color: #fff;
+    @include border-radius(100%);
+    @include box-shadow(0 0 2px 0 #777);
+    overflow: hidden;
+    @include simple_background('../../assets/logo.jpg');
+    background-size: 100% auto;
+}
+head-tab{
+    background-color: unset;
+    z-index: 2;
+    display: inline-block;
+    align-items: center;
+    width: 100%;
+    padding: .3em;
+    item{
+        text-align: center;
+        display: inline-block;
+        padding: .3em;
+        transition-duration: .2s;
+        icon{
+            display: none !important;
+        }
+        text{
+            font-size: .7em;
+            font-family: Roboto;
+            width: 100%;
+            display: inline-block;
+        }
+        &.active{
+            width: 4em !important;
+            height: 4em !important;
+            @include transform(translate3d(0,-0.7em,0));
+            @include border-radius(100%);
+            background-color: $main-color;
+            color: #fff;
+            @include box-shadow(0 0 3px 2px #999);
+            icon{
+                color: #fff;
+            }
+            text{
+                font-family: Roboto-Medium;
+            }
+        }
+    }
+}
+
+footbar{
+    height: 50px;
+    display: inline-block;
+    z-index: 2;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    head-tab{
+        background: #fff;
+        display: inline-flex !important;
+        align-items: center;
+        width: 100%;
+        padding: 0 !important;
+        item {
+            line-height: 1.5em !important;
+            transition-duration: .2s;
+            position: relative;
+            padding: 0;
+            icon{
+                display: inline-block !important;
+                width: 100%;
+            }
+            text{
+                font-size: .8em !important;
+                font-family: Roboto !important;
+                width: 100% !important;
+                padding: 0 .4em !important;
+                line-height: 10px !important;
+                height: 11px !important;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+                overflow: hidden;
+                position: relative;
+                top: -4px;
+            }
+            &.current{
+                icon{
+                    background-color: #eee;
+                    color: #333;
+                    position: absolute;
+                    @include transform(translate3d(-50%,-40%,0));
+                    @include box-shadow(0 -1px 4px 0 #777);
+                    @include border-radius(100%);
+                    left: 50%;
+                    font-size: 1.6em;
+                    width: 2.5em !important;
+                    line-height: 2.5em !important;
+                    height: 2.5em !important;
+                }
+                text{
+                    display: none !important;
+                    position: relative;
+                    @include transform(translate3d(0,-100%,0));
+                }
+            }
+        }
+        .slim-link-wrapper{
+            display: inline-flex !important;
+            white-space: normal !important;
+            height: 50px !important;
+        }
+        line-wrapper{
+            display: none !important;
+        }
+    }
+    &.shadow head-tab{
+        @include box-shadow(0 -1px 3px 0 #999);
+    }
+}
+central{
+    display: inline-block;
+    position: absolute;
+    width: 100%;
+    top: 0;
+    bottom: 0;
+    overflow: hidden;
+    background-color: #eee;
+}
+banner{
+    font-family: Muli-Bold;
+    font-size: 1.1em;
+    padding: .7em .4em;
+    color: #fff;
+}
+layer{
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #fff;
+    @include transform(translate3d(0,4em,0));
+    opacity: 0;
+    transition-duration: .2s;
+    &.active{
+        @include transform(translate3d(0,0,0));
+        opacity: 1;
+        transition-duration: .3s;
+    }   
+}
+form-field{
+    padding: .3em;
+    field{
+        padding: .5em .4em;
+        margin-bottom: .3em;
+        overflow: hidden;
+        font-family: Roboto;
+        z-index: 1;
+        position: relative;
+        @include border-radius(.5em);
+        background-color: #fff;
+        &.matte{
+            @include border-radius(0);
+            border-bottom: 1px solid #333;
+        }
+        label{
+            display: inline-block;
+            position: relative;
+            width: 100%;
+            text-align: left;
+            font-family: Roboto-Medium;
+        }
+        &.animated-field{
+            padding: .8em .4em .5em .4em;
+            margin: .4em 0;
+            label{
+                position: absolute;
+                font-family: inherit;
+                color: #777;
+                z-index: 1;
+                padding: .4em;
+                height: 40px;
+                font-size: 1em;
+                @include transform(translate3d(0,4px,0));
+                transition-duration: .3s;
+            }
+            &.writing{
+                label{
+                    font-size: 0.8em;
+                    color: #000;
+                    @include transform(translate3d(0,-16px,0));
+                }
+            }
+        }
+        .flex-wrapper{
+            position: relative;
+            z-index: 2;
+        }
+        input,textarea,select{
+            width: 100%;
+            display: inline-block;
+            background: unset;
+            border : 0;
+            position: relative;
+            font-family: inherit;
+            padding: .4em;
+            height: 40px;
+            z-index: 2;
+        }
+        input{
+            padding: .4em;
+            height: 40px;
+            font-size: 1em;
+            font-family: Roboto;
+            border: 1px solid transparent;
+        }
+    }
+    text{
+        font-family: Roboto;
+        padding: .4em;
+        &.gray{
+            color: #777;
+        }
+    }
+    button{
+        margin-top: .4em;
+        padding: .5em;
+        border: 0;
+        color: #fff;
+        display: inline-flex !important;
+        justify-content: center;
+        align-items: center;
+        font-size: 1em;
+        background-color: $main-color;
+        @include border-radius(4px);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, .6);
+        text{
+            font-family: Avenir-Black;
+            padding: 0;
+        }
+        icon{
+            line-height: 0 !important;
+        }
+        &.ios-style{
+            cursor: pointer;
+        }
+        &.reverse{
+            background-color: #fff;
+            color: $main-color;
+        }
+        &.light{
+            background-color: rgba(255,255,255,0.1);
+            color: $main-color;
+            box-shadow: unset;
+        }
+    }
+}
+box{
+    padding: .4em;
+    loader-icon{
+        padding: .3em;
+    }
+    text{
+        padding: .5em;
+        font-family: Roboto-Medium;
+    }
+}
+portfolio{
+    height: 250px;
+    width: 100%;
+    position: relative;
+    display: inline-block;
+    background-color: #ddd;
+    @include border-radius(.5em);
+    white-space: nowrap;
+    overflow: hidden;
+    slide{
+        display: inline-block;
+        width: 100%;
+        height: 100%;
+        position: relative;
+        white-space: normal;
+    }
+}
+
+menu{
+    display: inline-block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    background-color: rgba(0,0,0,0.4);
+    transform: translate3d(-100%,0,0);
+    z-index: 3;
+    panel{
+        display: inline-block;
+        height: 100%;
+        width: 100%;
+    }
+}
+
+swiper-container{
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    display: inline-block;
+    background-color: #fff;
+    white-space: nowrap;
+    page{
+        display: inline-block;
+        width: 100%;
+        white-space: normal;
+        height: 100%;
+        content{
+            display: inline-block;
+            width: 100%;
+            max-height: 100%;
+        }
+    }
+}
+

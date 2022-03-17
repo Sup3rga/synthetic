@@ -1,0 +1,41 @@
+from header import getHeadTab,AppBar,setHasFootBar
+import view
+import tab
+
+mixin Layer(
+    Boolean persistent : false,
+    String id : " ",
+    String background : "#fff",
+    AppBar appbar : AppBar(),
+    View body,
+    FloatWrapper floatButtons,
+    FootBar footbar
+){
+    <layer
+        persistent=${persistent}
+        id= "$id"
+        class="active"
+        style="
+            display: block;
+            opacity: 1;
+            background-image: unset;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: auto 100%;
+            background-size: cover;
+            background-color: ${background};
+        ">
+        <hidden-part>
+        </hidden-part>
+        <visible-part>
+            <?
+                hasFooter = len(footbar) > 0
+                setHasFootBar(hasFooter);
+            ?>
+            ${appbar}
+            ${floatButtons}
+            ${body}
+            ${hasFooter || platform() != 'ios' ? footbar : tab.FootBar(getHeadTab())}
+        </visible-part>
+    </layer>
+}

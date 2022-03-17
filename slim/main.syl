@@ -1,0 +1,17 @@
+/**
+*   decorator : main
+*/
+decorator main
+import _globals
+
+.cool{
+    width: ${width > 40 ? 100 : 200 };
+}
+
+#view{
+    display: none;
+}
+
+#view .test{
+    z-index: 2;
+}

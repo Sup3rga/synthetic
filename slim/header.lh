@@ -1,0 +1,89 @@
+import tab
+import base
+import component
+
+export String contrastColor(String color){
+    return str(jsExec('new Color().contrastColor("'+color+'")'));
+}
+
+export Tab headTab
+
+Boolean hasFootBar = false
+
+export setHasFootBar(Boolean val){
+    hasFootBar = val
+}
+
+export Tab getHeadTab(){
+    return headTab
+}
+setHeadTab(Tab val){
+    headTab = val
+}
+
+mixin AppBar extends base.Widget, base.Stylable(
+    String title : "Application",
+    Boolean withShadow: true,
+    String shadowColor: "#777",
+    Boolean hasBack : false,
+    Boolean hasMenu : false,
+    JSON<String, External> menuIconActions : {},
+    String height : "50px",
+    Boolean rounded: false,
+    String color: "#fff",
+    Boolean automaticColor: true,
+    Array<Icon> actions : [],
+    Tab tab,
+){
+    <?
+        setHeadTab(tab)
+        String leftIcon = (hasBack ? "arrow-left" : "bars")
+        Boolean ios = (platform() == 'ios')
+        Number _nbrIcon = int len(actions)
+        Boolean hasTab = (len(tab) > 0)
+        String _color = contrastColor(style.backgroundColor)
+        putTab = hasTab && platform() == 'ios' && !hasFootBar
+        if putTab {
+            reset tab(
+                flexWrapper : true,
+                style: {
+                    backgroundColor: style.backgroundColor
+                }
+            )
+        }
+        print "[***] " + putTab + '/' + hasTab
+    ?>
+    <appbar ${!putTab && hasTab ? 'class="with-tab"' : ''} style="
+        box-shadow : ${withShadow ? '0 0 4px 0 '+shadowColor   : 'unset'};
+        background-color: ${style.backgroundColor}
+    ">
+        <appbar-wrapper style="height: ${height}; width : 100%; color: ${automaticColor ? contrastColor(style.backgroundColor) : color};">
+            <icon-space class="super super-l2" style="text-align: center">
+                <?
+                    if hasMenu && hasBack {
+                        raise("can't set together arguments hasMenu && hasBack");
+                    }
+                    if hasBack || hasMenu {
+                        if hasMenu && (typeof(menuIconActions) == 'JSON') {
+                            component.Icon(leftIcon, event: menuIconActions)
+                        }
+                        else
+                            component.Icon(leftIcon)
+                    }
+                ?>
+            </icon-space>
+            <space class="super ${(ios ? "super-l2" : "")}" style="${(!ios ? "display : none"  : "")}"></space>
+            <titlebar class="super super-l${(!ios ? 8 - _nbrIcon : 4)}" style="text-align : ${(ios ? "center" : "left")}">
+                ${title}
+            </titlebar>
+            <icon-space class="super super-l4 actions" style="display: inline-flex; flex">
+                <? 
+                    for i in actions {
+                        ?>${i}<?
+                    }
+                ?>
+            </icon-space>
+        </appbar-wrapper>
+        ${!putTab ? tab : ''}
+    </appbar>
+}

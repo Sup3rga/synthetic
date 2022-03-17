@@ -1,0 +1,43 @@
+@include _widget;
+@from _extraComponent import Wrapper, Text, Icon;
+
+@mixin MenuHeader extends Widget(
+    $width: 100%,
+    $height: 200px,
+    $children: <Widget>[]
+){
+   <menu-header style="
+        display: $display;
+        width: $width;
+        height: $height;
+        background-color: $background;
+        padding: $insets;
+    ">
+        $children
+    </menu-header>
+}
+
+@mixin MenuListItem extends Wrapper, Route, Listener(
+    $icon : <String>,
+    $text : <String>,
+    $insets: .3em,
+    $iconWidth: 3em,
+    @const $display: inline-flex,
+    @const $align : center,
+    @const $class : "button",
+    @const $children : [
+          @use Icon($class : $icon, $attr : {
+              class : "super super-l2 float-btn rounded",
+          }, $style: {
+              "display" : "inline-block",
+              "text-align" : "center",
+              "width" : "$iconWidth"
+          }),
+          @use Text($text : $text, $height: inherit)
+    ]
+){}
+
+@mixin MenuList extends Wrapper(
+    @const $children : $list,
+    $list : <MenuListItem>[]
+){}

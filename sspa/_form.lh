@@ -1,0 +1,177 @@
+@include _widget;
+@from _extraComponent import Wrapper, CenteredWrapper;
+
+@mixin Form extends Widget(
+    $background : inherit,
+    $color : inherit,
+    $insets: 0em,
+    $id,
+    $children : []
+){
+    <form-field class="super super-l12"
+        style="
+            width: $width;
+            padding : $insets;
+            text-align: $align;"
+        @out($id ? id="$id")>
+        $children
+    </form-field>
+}
+@unused mixin Entry extends Widget, Listener(
+    $insets: .8em .4em .5em .4em,
+    $matteStyle: false,
+    $matteStyleColor: #000,
+    $matteBorderWidth: 1px,
+    $animated : false,
+    $format,
+    $regexp,
+    $label
+){}
+
+@unused mixin IconizedEntry extends Entry(
+    $behindIcon : <Icon>,
+    $besideIcon : <Icon>
+){}
+
+@mixin Field extends Entry(
+    $placeholder,
+    $type : text,
+    $readonly : false,
+    $options : [],
+    $minlength: 0,
+    $maxlength: 0,
+    $important: false,
+    $value,
+    $field_name,
+){
+    @if($type == textarea){
+        @out(<textarea entry-label="$label" data-name="$field_name"
+              @out($minlength > 0 ? minlength=$minlength)
+              @out($maxlength > 0 ? maxlength=$maxlength)
+              @out($important ? sspa-important=true)
+              @out(@len($regexp) ? regexp="$regexp")
+              placeholder="@out(!$animated ? $placeholder)"
+              @out($readonly? readonly)>
+              $value</textarea>
+          )
+    }@elif($type == select){
+        @out(<select data-name="$field_name" @out($important ? sspa-important=true) entry-label="$label" @out($readonly? readonly)>
+                <option value="">@out(!$animated ? $placeholder)</option>
+                @loop($options){
+                    @out(<option value="$i" @out(@len($value) && $value == $i ? selected)>$i</option>)
+                }
+            </select>
+        )
+    }@else{
+        @out(<input type="$type"
+                @out($minlength > 0 ? minlength=$minlength)
+                @out($maxlength > 0 ? maxlength=$maxlength)
+                value="$value"
+                data-name="$field_name"
+                entry-label="$label"
+                @out(@len($format) ? format="$format")
+                @out($important ? sspa-important=true)
+                @out(@len($regexp) ? regexp="$regexp")
+                placeholder="@out(!$animated ? $placeholder)"
+                @out($readonly? readonly)>
+        )
+    }
+}
+
+@mixin CombinedInput extends IconizedEntry(
+    $children : <Field>[],
+    $joinString : <String>,
+    $value
+){
+    <field sspa-join="$joinString" name="$name" class="super super-l12 super-al-left @out($matteStyle ? matte) @out($animated ? animated-field)" 
+    style="padding : $insets;@out($matteStyle ? border-bottom\: $matteBorderWidth solid $matteStyleColor;)">
+        @out(@len($label) ? <label style="transform: translate3d(0,0px,0); @out(!$animated ? color\: #000; font-size\: 0.8em;)">$label</label>)
+        <wrapper class="flex-wrapper" style="
+                    display: inline-flex;
+                    align-items: center;
+                    width: 100%;
+                    height : auto;
+                ">
+            $behindIcon
+            $children
+            $besideIcon
+        </wrapper>
+    </field>
+}
+
+@mixin Input extends IconizedEntry(
+    $placeholder,
+    $type : text,
+    $options : [],
+    $behindIcon : <Icon>,
+    $besideIcon : <Icon>,
+    $field_name,
+    $value
+){
+    <field name="$label" class="super super-l12 super-al-left @out($matteStyle ? matte) @out($animated ? animated-field)" style="padding : $insets;@out($matteStyle ? border-bottom\: $matteBorderWidth solid $matteStyleColor;)">
+        @out($animated ? <label>$placeholder</label>)
+        <wrapper class="flex-wrapper" style="
+            display: inline-flex;
+            align-items: center;
+            width: 100%;
+            height : auto;
+        ">
+            $behindIcon
+            @use Field($placeholder, $type,
+                $options: $options,
+                $animated : $animated,
+                $field_name : $field_name,
+                $label : $label,
+                $format : $format,
+                $regexp : $regexp,
+                $value : $value
+            );
+            $besideIcon
+        </wrapper>
+    </field>
+}
+
+@mixin Button extends Widget, Listener, Route(
+    $text,
+    $class,
+    $light : false,
+    $lightColor : #333,
+    $behindIcon : <Icon>,
+    $besideIcon : <Icon>,
+    @const $css : <String>
+){
+    <button class="super super-l12 $class @out($ios || $hybrid ? ios-style)"
+            style="$css;
+            @out($light ?
+                background-color\: rgba(200,200,200,0.1);
+                color \: $lightColor;
+                border\: 0;
+                width \: auto;
+                box-shadow \: unset;
+            )">$behindIcon $text $besideIcon</button>
+}
+
+@mixin FloatWrapper extends Wrapper(
+    $position: absolute,
+    $bottom: 77px,
+    $display: inline-block,
+    $top: unset,
+    $left: unset,
+    $right: 25px,
+    $width: 50px,
+    $height: auto,
+    $children: <FloatButton>[]
+){}
+
+@mixin FloatButton extends Button(
+    $class,
+    @const $text : $icon,
+    @const $css : "width: $width; margin: $margin; z-index: $level; background-color: $background; border: 0; box-shadow: $shadow; height: $height; border-radius: 100%;",
+    $icon : <Icon>,
+    $background: #fff,
+    $shadow:  0 1px 3px 0 #555,
+    $margin: .2em,
+    $height: 5em,
+    $level: 2,
+    $width: 5em
+){}

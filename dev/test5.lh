@@ -1,0 +1,12 @@
+//Test sur les importations
+
+//importation depuis la meme racine
+import module
+
+//format
+import fichier
+import fichier in alias
+import package.*
+import package.* in alias
+
+//

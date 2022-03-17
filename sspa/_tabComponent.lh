@@ -1,0 +1,36 @@
+@include _widget;
+@from _extraComponent import Text;
+
+@mixin HeadTabItem extends Widget, Route(
+    @unset $label : <String>,
+    $font : "Roboto-Medium",
+    $verticalAlign: 40px,
+    $padding : 0 .8em,
+    @unset $icon : <Icon>,
+    $linkedTo: <String>,
+    $linkIndex: <Number>0
+){
+    <item class="button" style="display: $display; width: auto; height: 100%" data-linked="$linkedTo" data-index="$linkIndex">
+        $icon
+        @use Text($text : $label, $align: center, $insets: $padding, $font : $font, $vertical_align: $verticalAlign);
+    </item>
+}
+
+@mixin HeadTab extends ImplementedWidget(
+   $children: <HeadTabItem>[],
+   $width: 100%,
+   $height: 50px,
+   $align: center,
+   $lineWidth: auto,
+   $lineColor: #333
+){
+    <head-tab class="sspa-tab" sspa-linewidth="$lineWidth">
+        <link-wrapper class="sspa-link-wrapper">
+            $children
+        </link-wrapper>
+        <br>
+        <line-wrapper class="sspa-line-wrapper">
+            <line class="sspa-line" style="background-color: $lineColor"></line>
+        </line-wrapper>
+    </head-tab>
+}

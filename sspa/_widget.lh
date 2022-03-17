@@ -1,0 +1,143 @@
+@unused mixin Selectable(
+    $name,
+    $id
+){
+    @out(<sspa-metadata type="selectable">
+        {data-name : "$name", id : "$id"}
+    </sspa-metadata>)
+}
+@unused mixin Widget extends Selectable(
+    $style: {},
+    $attr: {},
+    $display: "inline-block",
+    $position: "static",
+    $top: <Any>unset,
+    $overflow: <String>"unset",
+    $left: <Any>unset,
+    $bottom: <Any>unset,
+    $right: <Any>unset,
+    $background: unset,
+    $width: inherit,
+    $height: inherit,
+    $foreground: "#000",
+    $color: #000,
+    $vertical_align: top,
+    $align: left,
+    $radius: <Any>0,
+    $insets: <Any>0,
+    $image: unset,
+    $backdrop: unset,
+){
+    @out(<sspa-metadata type="style">
+        $style
+    </sspa-metadata>
+    <sspa-metadata type="attribute">
+        $attr
+    </sspa-metadata>)
+}
+
+@unused mixin Overlay(){
+    <sspa-metadata type="overlay">
+        {}
+    </sspa-metadata>
+}
+
+@unused mixin ImplementedWidget extends Widget(){
+    @out(<sspa-metadata type="style">
+        {
+            display: "$display",
+            "background-color": "$background",
+            width : "$width",
+            height : "$height",
+            position: "$position",
+            top: "$top",
+            right: "$right",
+            bottom: "$bottom",
+            left: "$left",
+            color : "$foreground",
+            "text-align" : "$align",
+            padding : "$insets",
+            "background-image": "@out($image == unset ? unset : url('$image'))"
+        }
+    </sspa-metadata>)
+}
+
+@unused mixin Model extends Widget(
+    $ressources : [],
+    $view : <Widget>
+){
+    @loop($ressources){
+        @out($view)
+    }
+}
+
+@unused mixin Route(
+    $route
+){
+    @out(<sspa-metadata type="route">
+        $route
+    </sspa-metadata>)
+}
+
+@unused mixin RessourceHost(
+    $ressources : <Ressource>[]
+){
+    $ressources
+}
+
+@unused mixin Listener(
+    $event: {}
+){
+    @out(<sspa-metadata type="events">
+        $event
+    </sspa-metadata>)
+}
+
+@unused mixin Watcher(
+    $target: <String>,
+    $listen: <String>,
+    $invoke
+){
+    @out(<sspa-metadata type="watch">
+        {
+            target: $target,
+            event: $listen,
+            action: $invoke
+        }
+    </sspa-metadata>)
+}
+
+@unused mixin _DragThenScrollArgs(
+    $toVertical: true,
+    $maxValue: <Any>"auto",
+    $heightOnly: false,
+    $releaseTime: 400,
+    $parentLevel: 0,
+    $applyToParent: false
+){}
+@unused mixin DragThenScroll extends _DragThenScrollArgs(){
+    @out(<sspa-metadata type="dragthenscroll">
+        {
+            vertical: $toVertical,
+            maxValue: $maxValue,
+            parentLevel: $parentLevel,
+            time: $releaseTime,
+            heightOnly: $heightOnly,
+            applyToParent: $applyToParent
+        }
+    </sspa-metadata>)
+}
+
+@unused mixin ParentAccess(
+    $accessLevel : <Number>[1],
+    $accessStyle: {},
+    $accessAttr : {}
+){
+    @out(<sspa-metadata type="parent">
+            {
+                level : $accessLevel,
+                style : $accessStyle,
+                attr  : $accessAttr
+            }
+        </sspa-metadata>)
+}

@@ -1,0 +1,67 @@
+mixin Span(){
+    <span>ok</span>
+}
+/*
+unused mixin Design(
+    JSON<String> style : {}
+){
+    @MixinActing
+    {
+       style
+    }
+}
+unused mixin Act(
+    JSON<String, External> event : {
+        click: external (){
+            console.log('[OK]')
+        }
+    }
+){
+    @MixinActing
+    {
+        event : event
+    }
+}
+
+unused mixin React<T : Any>(
+    Array<T> all : []
+);
+
+mixin Span extends Act(
+    String txt : "Bonjour",
+    JSON<String> style: {}
+){
+    <?
+        invoke Design(style)
+    ?>
+    <span>${txt}</span>
+}
+
+mixin ReactDom extends React<Span>,Design(
+    String text : "Hello"
+){
+    <?
+        Array list = all;
+    ?>
+    <span>${text}</span>
+    <?
+        for i in list{
+            ?>${i}<?
+        }
+    ?>
+}
+
+export JSON<String> theme = {
+    mainColor : "#0f7277"
+}
+
+export Number ok = 50
+
+export sayHi(e){
+    return "Hello " + e + " !"
+}
+
+export Hi(){
+    print "Hooo ! " + ok
+}
+*/

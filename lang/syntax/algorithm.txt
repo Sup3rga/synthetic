@@ -1,0 +1,23 @@
+//Référencement des objets
+[0,5]
+    [1,10]
+        [3,40]
+        [3,60]
+    [1,80]
+        [3,130]
+        [3,170]
+
+- l'emplacement est composé des coordonnées [scope] et [index] tel que chaque scope est l'étendue ou un block
+  d'instructions, et l'index est la position du curseur dans la lecture du code source
+- pour savoir l'emplacement du bloc parent pour une instruction spécifique, on enregistre au préalable tous
+  les emplacements dans un tableau. Puis on récupère l'emplacement de l'instruction avant de parcourir la
+  liste le tableau qu'on a proposé. Dans le schéma présenté, il y a deux étendues de niveau 1, l'un avec
+  un index 10 et l'autre avec un index 80. Si on veut savoir dans quel étendue se trouve 
+  l'instruction [3,170]:
+    - on va d'abord regrouper tous les scopes dans un ordre décroissant
+    - on compare le scope de l'instruction [3,170] aux scopes en prenant en compte seulement les scopes qui 
+      lui sont inférieurs
+    - lorsqu'on trouve un scope inférieur, avant de progresser au scope suivant, on va comparer les index
+      enregistrés, en faisant la même opération qu'avec les scopes
+    - on considérera le plus grand index qui est inférieur à l'index de l'instruction
+    - si l'opération n'a pas réussi, on progresse au scope suivant jusqu'à la racine [0,0]

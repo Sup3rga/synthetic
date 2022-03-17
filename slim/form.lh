@@ -1,0 +1,290 @@
+import base
+import component
+
+unused mixin Entry extends base.Widget, base.Listener(
+    String insets: ".8em .4em .5em .4em",
+    Boolean matteStyle: false,
+    String matteStyleColor: "#000",
+    String matteBorderWidth: "1px",
+    Boolean animated : false,
+    String format,
+    RegExp regexp,
+    String entryLabel
+);
+
+unused mixin IconizedEntry extends Entry(
+    Icon behindIcon,
+    Icon besideIcon
+);
+    
+mixin Form extends base.Widget, base.Container<Widget>(){
+    @SyncBlockRender
+    <form-field class="super super-l12"
+        style="
+            width: ${width};
+            padding : ${insets};
+            text-align: ${align};
+        "
+    >
+    <? 
+        for i in children{
+            ?>${i}<?
+        }
+    ?>
+    </form-field>
+}
+
+mixin Field extends Entry(
+    String placeholder,
+    String _type : 'text',
+    Boolean readOnly : false,
+    Array<String|Number> options : [],
+    Number minLength: 0,
+    Number maxLength: 0,
+    Boolean important: false,
+    String value,
+    String fieldName,
+){
+    <?
+     if _type == 'textarea'{
+        ?>
+            <textarea 
+                entry-label="${entryLabel}" 
+                data-name="${fieldName}"
+                minlength=${minLength > 0 ? minLength : -1}
+                maxlength=${maxLength > 0 ? maxLength : -1}
+                slim-important=${important}
+                regexp=${regexp}
+                placeholder="${!animated ? placeholder : ''}"
+                ${readOnly ? readonly : ''}
+            >
+              ${value}
+            </textarea>
+        <?
+    }
+    elif _type == 'select'{ 
+         ?>
+            <select data-name="${fieldName}" slim-important=${important} entry-label="${label}">
+                <option value="">${!animated ? placeholder}</option>
+                ?>
+                <?
+                loop(options){
+                    ?>
+                    <option value="${i}" ${len(value) && value == i ? "selected" : ""}>${i}</option>
+                    <?
+                }
+                ?>
+            </select>
+        <?
+    }
+    else{
+        ?>
+        <input type="${_type}"
+            entry-label="${entryLabel}" 
+            data-name="${fieldName}"
+            minlength=${minLength > 0 ? minLength : -1}
+            maxlength=${maxLength > 0 ? maxLength : -1}
+            value="${value}"
+            ${len(format) ? 'format="'+format+'"' : ''}
+            ${important ? 'sspa-important=true' : ''}
+            ${len(regexp) ? 'regexp="'+regexp'"' : ''}
+            placeholder="${!animated ? placeholder : ''}"
+            ${readOnly ? readonly : ''}
+        >
+        <?
+    }
+    ?>
+}
+
+
+mixin CombinedInput extends base.Container<Field>, IconizedEntry(
+    String joinString,
+    String value
+){
+    <field  
+        sspa-join="${joinString}" name="${name}" 
+        class="super super-l12 super-al-left ${matteStyle ? 'matte' : ''} ${animated ? 'animated-field' : ''}" 
+        style="padding : $insets;${matteStyle ? 'border-bottom : '+matteBorderWidth+' solid '+matteStyleColor : ''}">
+        <?
+            if len(entryLabel){
+        ?>
+            <label style="transform: translate3d(0,0px,0); ${!animated ? 'color: #000; font-size: 0.8em;' : ''}">${entryLabel}</label>
+        <?
+            }
+        ?>
+        <wrapper 
+            class="flex-wrapper" 
+            style="display: inline-flex;
+                    align-items: center;
+                    width: 100%;
+                    height : auto;"
+        >
+            ${behindIcon}
+            <?
+                Array list = (len(children) ? children : [child])
+                for i in list {
+            ?>
+                ${i}
+            <?  
+                }
+            ?>
+            ${besideIcon}
+        </wrapper>
+    </field>
+}
+
+mixin Input extends IconizedEntry(
+    String placeholder,
+    String _type : 'text',
+    const Array<String|Number> options : [],
+    Icon behindIcon,
+    Icon besideIcon,
+    String fieldName,
+    String value
+){
+    <field 
+        name="${entryLabel}" 
+        class="super super-l12 super-al-left ${matteStyle ? 'matte' : ''} ${animated ? 'animated-field' : ''}" 
+        style="padding : ${insets}; ${matteStyle ? 'border-bottom : '+matteBorderWidth+' solid '+matteStyleColor+';' : ''}"
+    >
+        <?
+        if animated {
+            ?>
+            <label>$placeholder</label>
+            <?
+        }
+        ?>
+        <wrapper 
+            class="flex-wrapper" 
+            style="display: inline-flex;
+                    align-items: center;
+                    width: 100%;
+                    height : auto;"
+        >
+            ${behindIcon}
+            <?
+            Field(
+                placeholder, 
+                _type,
+                options: options,
+                animated : animated,
+                fieldName : fieldName,
+                entryLabel : entryLabel,
+                format : format,
+                regexp : regexp,
+                value : value
+            )
+            ?>
+            ${besideIcon}
+        </wrapper>
+    </field>
+}
+
+mixin Select extends Input(
+    Array<String|Number> options : []
+);
+
+unused mixin Button extends base.Widget, base.Listener, base.Stylable(
+    String text,
+    String className,
+    Boolean light : false,
+    String lightColor : '#333',
+    Icon behindIcon,
+    Icon besideIcon 
+);
+
+mixin MaterialButton extends Button(){
+    <?
+        Boolean ios = (platform() == 'ios');
+    ?>
+    <button class="super super-l12 ${className} ${ios ? 'ios-style' : ''}"
+            style="${light ?
+                'background-color : rgba(200,200,200,0.1);
+                color  : '+lightColor+';
+                border : 0;
+                width  : auto;
+                box-shadow  : unset;' : ''
+            }"
+    >
+        ${behindIcon}
+        <text> 
+            ${text}
+        </text> 
+        ${besideIcon}
+    </button>
+}
+
+mixin FloatButton extends Button(
+    String className,
+    unset Icon icon,
+    String background : '#fff',
+    String shadow :  '0 1px 3px 0 #555',
+    String margin : '.2em',
+    String height : '5em',
+    Number level: 2,
+    String width: '5em'
+){
+    @applyDecorator('main')
+    <button class="super super-l12 ${className} ${ios ? 'ios-style' : ''}"
+            style="
+            width: ${width}; 
+            margin: ${margin}; 
+            z-index: ${level}; 
+            background-color: ${background}; 
+            border: 0; 
+            box-shadow: ${shadow}; 
+            height: ${height}; 
+            border-radius: 100%;
+            ${light ?
+                'background-color : rgba(200,200,200,0.1);
+                color  : '+lightColor+';
+                border : 0;
+                width  : auto;
+                box-shadow  : unset;' : ''
+            }"
+    >
+    ${icon} 
+    </button>
+}
+
+
+mixin FloatWrapper extends component.Wrapper, base.Container<FloatButton>(
+    JSON<String> style: {
+        position: 'absolute',
+        zIndex: str 4,
+        bottom: '77px',
+        top: 'unset',
+        left: 'unset',
+        right: '25px',
+        width: 'auto',
+        height: 'auto',
+    }
+);
+/*
+mixin FloatWrapper extends base.Container<FloatButton>(
+    String position: 'absolute',
+    String bottom: '77px',
+    String top: 'unset',
+    String left: 'unset',
+    String right: '25px',
+    String width: 'auto',
+    String height: 'auto'
+){
+    <wrapper style="
+        position : ${position};
+        bottom : ${bottom};
+        top : ${top};
+        left : ${left};
+        right : ${right};
+        width : ${width};
+        height : ${height};
+    ">
+        <?
+            Array list = (len(children) ? children : [child])
+            for i in list{
+                ?>${i}<?
+            }
+        ?>
+    </wrapper>
+}
+*/

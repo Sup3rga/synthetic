@@ -1,0 +1,123 @@
+from ..slim.* import *
+from theme import *
+
+JSON<String,...,String|Boolean> rules = {
+    _color: contrastColor(theme.mainColor),
+    theme : theme.mainColor,
+    automaticColor: true,
+    header: {
+        background: theme.mainColor
+    }
+};
+
+Array<Item> itemBuilder(JSON data){
+    Array<Item> r = []
+    loop data {
+        push(r, Item(
+            color : rules._color,
+            icon  : icon,
+            text  : text,
+            style:{
+                padding: '0 1em'
+            }
+        ))
+    }
+    return r
+}
+
+Layer(
+    appbar : AppBar(
+        title : "Slim",
+        hasMenu : true,
+        withShadow: false,
+        automaticColor: rules.automaticColor,
+        style: {
+            backgroundColor: theme.mainColor
+        },
+        menuIconActions : {
+            click: external(){
+                console.log('Menu')
+            }
+        },
+        actions : [
+            Icon('more', event: {
+                click: external (){
+                    console.log('[MORE]')
+                }
+            }),
+            Icon('bell', event: {
+                click: external (){
+                    console.log('[BELL]')
+                }
+            })
+        ]/*,
+        tab: Tab(
+            lineColor: rules._color,
+            children: itemBuilder({
+                0 : {
+                    icon : "home",
+                    text : "Accueil"
+                },
+                1: {
+                    icon : 'sms',
+                    text : 'Boite de messages'
+                },
+                2: {
+                    icon: 'users',
+                    text: 'Contacts'
+                },
+                3: {
+                    icon: 'phone',
+                    text : 'Appels'
+                }
+            })
+        )*/
+    ),
+    body: View(
+        style: {
+            paddingTop: '50px'
+        },
+        children : [
+            Wrapper(
+                style: {
+                    display: block,
+                    width: '100%',
+                    textAlign: center,
+                    fontFamily: 'Roboto'
+                },
+                // child: Text("Hello world !")
+                children: [
+                    Form(
+                        insets: '0 1em',
+                        children : [
+                            Input("Votre nom !", matteStyle: true),
+                            Input("Votre prénom !", matteStyle: true),
+                            Input("Votre Sexe !", 
+                                matteStyle: true, 
+                                _type: "select",
+                                options: [
+                                    "Féminin",
+                                    "Masculin"
+                                ]
+                            ),
+                            Input("Votre mot de passe", matteStyle: true, _type: "password"),
+                            Space(height: '30px'),
+                            MaterialButton(text : "Ok", style: {
+                                    backgroundColor: rules.theme,
+                                    color: rules._color,
+                                    boxShadow: "unset"
+                                }, 
+                                besideIcon: Icon('sign-in', padding: str 0)
+                            )
+                        ]
+                    )
+                ]
+            )
+        ]
+    ),
+    floatButtons : FloatWrapper(
+        child: FloatButton(
+            icon : Icon('plus')
+        )
+    )
+)

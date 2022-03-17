@@ -1,0 +1,3 @@
+export JSON<String> _slim = {
+    theme: "rgb(107,190,190)"
+}

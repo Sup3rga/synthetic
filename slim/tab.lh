@@ -1,0 +1,103 @@
+import base
+import component
+
+mixin Item extends base.Widget, base.Stylable(
+    unset String text,
+    unset String icon,
+    String font : "Roboto-Medium",
+    String itemVAlign: "20px",
+    String itemInsets : "0 .8em",
+    String linkedTo,
+    Number linkIndex
+){
+    <item class="button" 
+        style="
+            display: inline-flex;
+            flex-direction: column; 
+            width: auto; 
+            height: 55px;
+            top: -10px;
+        " 
+        data-linked="${linkedTo}" 
+        data-index="${linkIndex}"
+    >
+        <?
+            component.Icon(
+                tag : icon,
+                style: {
+                    color: color
+                }
+            )
+            component.Text(text : text, style:{
+                fontFamily: font,
+                fontSize: "1em",
+                lineHeight: itemVAlign,
+                padding: itemInsets,
+                color: color
+            })
+        ?>
+    </item>
+}
+
+mixin Tab extends base.Widget, base.Stylable, base.Container<Item>(
+    String lineWidth : 'auto',
+    String lineColor : '#333',
+    Boolean flexWrapper : false,
+    Number timeTransition : 200
+){
+    @SyncBlockRender
+    <?
+        // invoke base.Stylable({
+        //     display: 'inline-block'
+        // });
+    ?>
+    <head-tab class="slim-tab" slim-linewidth="${lineWidth}" slim-time-transition=${timeTransition}>
+        <?
+            if !flexWrapper{
+        ?>
+        <div class="sscroller" style:{
+            display: 'inline-flex',
+            height: 'inherit',
+            overflow: 'hidden',
+            flexDirection: 'column'
+        }>
+        <?
+            } 
+        ?>
+            <link-wrapper class="slim-link-wrapper" sswitcher-activation=${!flexWrapper} style="
+                display: ${(flexWrapper ? 'inline-flex' : 'inline-block')};
+            ">
+                <? 
+                    Array list = (len(children) ? children : [child])
+                    for i in list{
+                        print "list"
+                        ?>${i}<?
+                    }
+                ?>
+            </link-wrapper>
+        
+        <?
+            if !flexWrapper{
+        ?>
+            <span style="display: block;"></span>
+            <line-wrapper class="slim-line-wrapper">
+                <line class="slim-line" style="background-color: ${lineColor}"></line>
+            </line-wrapper>
+        </div>
+        <?
+            }
+        ?>
+    </head-tab>
+}
+
+mixin FootBar extends base.Widget, base.Stylable(
+    unset Tab child
+){
+    <?
+        background = (len(style.backgroundColor) ? style.backgroundColor : background)
+        print ("background",background,style.backgroundColor)
+    ?>
+    <footbar style="background-color : ${background}; color: ${color};">
+        ${child}
+    </footbar>
+}

@@ -1,0 +1,88 @@
+import base
+
+String getClass(String tag : "ok"){
+    return jsExec "new MobileIcons('"+tag+"').getClass()"
+}
+
+mixin Icon extends base.Listener, base.Widget, base.Stylable(
+    String tag : "test",
+    String fontSize: "1.6em",
+    String padding: ".4em",
+    JSON<String, External> event : {
+        click : external (){
+            console.log('Error !')
+        }
+    }
+){
+    <icon class='${getClass(tag)}' style="
+        font-size: ${fontSize};
+        padding: ${padding};
+        display: inline-block;
+    "></icon>
+}
+
+mixin Text extends base.Widget, base.Stylable(
+    unset String text : "",
+    String font: inherit,
+    String size: 1em,
+    String height: auto,
+    String vAlign: unset,
+    String hAlign: center,
+    String width: '100%',
+    String background: 'unset',
+    String color: black
+){
+    <? 
+        invoke base.Stylable({
+            display : display,
+            width : width,
+            padding : insets,
+            height: height,
+            lineHeight: vAlign,
+            textAlign: hAlign,
+            borderRadius: radius,
+            backdropFilter: backdrop
+        });
+    ?>
+    <text>
+        ${text}
+    </text>
+}
+
+mixin Wrapper extends base.Stylable, base.Container<Widget>(){
+    <wrapper>
+        <?
+            Array list = (len(children) ? children : [child])
+            for i in list{
+                ?>${i}<?
+            }
+        ?>
+    </wrapper>
+}
+
+mixin Separator extends base.Widget(
+    String height: "2px",
+    String width: '100%',
+    String background: '#ccc',
+    String radius: '1em'
+){
+    <separator style="
+        display: ${display};
+        width: ${width};
+        height: ${height};
+        background-color: ${background};
+        border-radius: ${radius};
+    "></separator>
+}
+
+mixin Space extends base.Widget(
+    String width: '100%',
+    String height: '1em'
+){
+    <space style="
+        display: block;
+        width: ${width};
+        height: ${height};
+    ">
+    </space>
+}
