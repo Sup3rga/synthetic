@@ -1,4 +1,4 @@
-
 private final class Person{
-       
+    /* Bonjour */
+    Array< ... ,String> age = "Bonjour"[3];
 }

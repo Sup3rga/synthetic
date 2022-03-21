@@ -1,7 +1,7 @@
 class Person{ [0,5]
     [1,10]
     Person(){
-        [2,27]
+        String prenom = 40; [2,27]
         if true {
             [3, 40]
         }
@@ -11,12 +11,19 @@ class Person{ [0,5]
     }
     [1,80]
     getNom(){
-        [2, 90]
+        String nom = 40; [2, 90]
         if nom.length == 0 {
             [3, 130]
+            print prenom; [3,140] //undefined
+            //[3, 130 > y > 80 ]
         }
         else{
             [3, 170]
         }
     }
+}
+
+class Person{
+    static Array<Number> ids = [];
+    static ternary = 4 + 5 < 6 ? 4 - 1 < 2 ? 40 : 2 : 3 + 4;
 }

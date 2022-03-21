@@ -1,0 +1,27 @@
+var t = 5
+
+t = {
+    bonjour: "cool",
+    hello: {}
+}
+
+t = - - t
+
+t = [5,"bien"]
+
+//Arithmetic
+k = 8 + 4 * 40 - 20 //120
+
+//representation
+{
+    bonjour: {
+        type: 'Any',
+        constraints: null,
+        value: "cool"
+    },
+    hello: {
+        type: 'Any',
+        constraints: null,
+        value: {}
+    }
+}
