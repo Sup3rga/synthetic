@@ -148,6 +148,32 @@ $syl.set = function(e, v, s){
     return this.isset(s) ? (e ? this.isset(v) ? v : null : this.isset(s) ? s : null) : (this.isset(e) ? e : this.isset(v) ? v : null);
 }
 /**
+ * La méthode garbage pemet de nettoyer le stockage inutile des variables
+ */
+$syl.garbage = function(){
+    for(var i in this.modules){
+        if(this.modules[i].name == null){
+            delete Synthetic.Lang.objects[this.modules[i].addr];
+            delete this.modules[i];
+        }
+    }
+}
+/**
+ * La méthode len permet de calculer la longueur d'un objet
+ */
+$syl.len = function(arg){
+    var r = 0;
+    if(typeof arg != 'object'){
+        r = Array.isArray(arg) ? arg.length : (arg+'').length;
+    }
+    else{
+        for(var i in arg){
+            r++;
+        }
+    }
+    return r;
+};
+/**
  * la méthode copy permet de copier les données sérialisables d'un objet itérable
 */
 $syl.copy = function(e){
@@ -212,7 +238,7 @@ $syl.loop = function(callback,cursor){
     var $this = this,
         cursor = typeof cursor == 'number' ? cursor : $this.cursor.index,
         _break = false, word = '',
-        wrapper;
+        wrapper, _wrapper = null;
         len = $this.code.length;
     return new Promise(function(resolve, reject){
         /**
@@ -245,13 +271,14 @@ $syl.loop = function(callback,cursor){
         */
         function until(){
             var findEOS = false, doubleSigns = false, restart = false;
-            wrapper = {
+            wrapper = _wrapper != null ? _wrapper : {
                 quote: 0,
                 simple_quote: 0,
                 last_char: '',
                 comment: 0,
                 regex: 0
             };
+            _wrapper = null;
             while(cursor < len && !_break){
                 if(
                     !wrapper.comment && (
@@ -365,7 +392,7 @@ $syl.loop = function(callback,cursor){
                 if(!findEOS && !wrapper.comment){
                     word += $this.code[cursor];
                 }
-                if(!wrapper.quote && !wrapper.simple_quote){
+                if(!wrapper.quote && !wrapper.simple_quote && !wrapper.comment){
                     callback({
                             char: doubleSigns ? $this.code[cursor-1]+$this.code[cursor] : $this.code[cursor], 
                             word: findEOS ? word : null, 
@@ -376,7 +403,15 @@ $syl.loop = function(callback,cursor){
                             stop: stop, 
                             end: end
                         });
+                        // console.log('[__char__]',$this.code[cursor],findEOS,word,'>', cursor);
                 }
+                /**
+                 * On parre à l'éventualité que le curseur pourrait être mise à jour dans
+                 * l'exécution du callback, alors, il faut mettre aussi à jour toutes
+                 * les variables qui en dépendent
+                 */
+                cursor = $this.cursor.index;
+                findEOS = !wrapper.quote && !wrapper.simple_quote && !wrapper.comment && Synthetic.Lang.EOS.indexOf($this.code[cursor]) >= 0;
                 if(findEOS) word = '';
                 if(_break) break;
                 if($this.code[cursor] != '\n'){
@@ -388,6 +423,7 @@ $syl.loop = function(callback,cursor){
             }
             if(restart){
                 restart = false;
+                _wrapper = wrapper;
                 until();
             }
             if(cursor >= len - 1){
@@ -397,6 +433,23 @@ $syl.loop = function(callback,cursor){
         until();
     });
 };
+/**
+ * La méthode toNextChar permet de trouver le prochain caractère non-blanc dans le
+ * code pour éviter d'attendre jusqu'au prochain tour de la boucle.
+*/
+$syl.toNextChar = function(){
+    var $this = this, _char;
+    return new Promise(function(res,rej){
+        $this.loop(function(cursor,loop){
+            if(/[\S]+/.test(cursor.char)){
+                _char = cursor.char;
+                loop.end();
+            }
+        }).then(function(){
+            res(_char);
+        })
+    });
+}
 /**
  * La méthode read permet de lire le contenu un fichier. Elle retourne son contenu
  */
@@ -427,22 +480,35 @@ $syl.genericType = function(type){
         }
         var _dictMod = _type != 'Array',
             type = {
-            type: _type,
-            constraints: null,
-            hasKeyConstraint: false,
-            hasNextType: false,
-            saved: false
-        }, lastword = null;
+                type: _type,
+                constraints: null,
+                hasKeyConstraint: false,
+                hasNextType: false,
+                saved: false
+            }, lastword = null, all = false;
 
         function savetype(){
             var r = false;
             if(lastword != null && type.constraints != null){
                 r = true;
-                type.constraints[type.hasKeyConstraint || _dictMod ? 'value' : 'key']
+                /**
+                 * Si le type n'est pas défini dans le module
+                 * On soulève une exception
+                 */
+                if($this.types.indexOf(lastword) < 0){
+                    throw new Error($this.err("the type [ "+lastword+" ] is undefined !"));
+                }
+                if(_dictMod && !type.hasKeyConstraint && ['Number', 'String','Any'].indexOf(lastword) < 0){
+                    throw new Error($this.err("Number or String are only allowed to be key constraints"));
+                }
+                type.constraints[!type.hasKeyConstraint && _dictMod ? 'key' : 'value']
                 .push(typeof lastword == 'string' ? {
                     type: lastword,
                     constraints: null
                 } : lastword);
+                if(_dictMod && !type.hasKeyConstraint){
+                    type.hasKeyConstraint = true;
+                }
                 lastword = null;
             }
             return r;
@@ -465,16 +531,7 @@ $syl.genericType = function(type){
                     throw new Error($this.err("illegal expression [ "+cursor.char+" ]"));
                 }
                 else{
-                    if(typeof lastword == 'string'){
-                        loop.stop();
-                        $this.genericType(lastword).then(function(e){
-                            lastword = e;
-                            loop.start();
-                        }).catch(function(e){
-                            loop.end();
-                            rej(e);
-                        })
-                    }
+                    throw new Error($this.err("Syntax error !"));
                 }
             }
             //pour les autres caractères
@@ -490,6 +547,10 @@ $syl.genericType = function(type){
                         if(type.constraints.recursive){
                             throw new Error($this.err("illegal expression [ "+cursor.char+" ]"));
                         }
+                        if(type.constraints.key.length == 0 && _dictMod){
+                            lastword = 'Any';
+                            savetype();
+                        }
                         type.constraints.recursive = true;
                         $this.cursor.index += 2;
                     }
@@ -501,25 +562,45 @@ $syl.genericType = function(type){
                     savetype();
                     type.hasKeyConstraint = true;
                     if( (type.constraints.key.length == 0 && _dictMod) || (!_dictMod && !type.constraints.recursive)){
-                        console.log(type.constraints, _dictMod)
+                        // console.log(type.constraints, _dictMod)
                         throw new Error($this.err("illegal character [ , ]"));
                     }
                 }
                 //Dès qu'on rencontre le caractère '>', on arrête tout puis on résout la promesse
                 else if(cursor.char == '>'){
+                    /**
+                     * Si c'est une seule valeur passé pour un JSON,
+                     * on la considère pour la clé et la valeur en même temps.
+                     */
+                    if(
+                        _dictMod && 
+                        type.constraints.key.length == 0 && 
+                        type.constraints.value.length == 0 &&
+                        lastword && lastword.length
+                    ){
+                        all = lastword;
+                        savetype();
+                        lastword = all;
+                        savetype();
+                        all = true;
+                    }
                     //Aucune généricité ne peut être vide
-                    if(!savetype()){
+                    if(!savetype() && !type.constraints.recursive && !all){
                         throw new Error($this.err("illegal expression [ "+cursor.char+" ]"));
                     }
                     type.saved = true;
                     loop.end();
                     $this.cursor.index++;
+                    if(type.constraints.value.length == 0){
+                        lastword = 'Any';
+                        savetype();
+                    }
                     res(type);
                 }
             }
             //sinon il y a erreur de syntaxe
             else if($this.currentType.constraints != null && $this){
-                console.log('[Current]', $this.cursor.scope, Synthetic.Lang.scope, cursor.word, $this.cursor.index, cursor.index);
+                // console.log('[Current]', $this.cursor.scope, Synthetic.Lang.scope, cursor.word, $this.cursor.index, cursor.index);
                 throw new Error($this.err("illegal expression [ "+(cursor.word ? cursor.word : cursor.char)+" ]" + $this.code.substr(cursor.index,10)));
             }
         });
@@ -582,7 +663,27 @@ $syl.getImplicitType = function(value){
     return type in Synthetic.Lang.typeFromConstants ? Synthetic.Lang.typeFromConstants[type] : 'Any';
 }
 /**
- * La méthode toNativeValue permet d'avoir en mémoire les valeurs synthétiques 
+ * La méthode toVariableStructure permet de transformer une simple valeur en 
+ * valeur synthétic sérialisée
+*/
+$syl.toVariableStructure = function(value,parent){
+    return this.meta({
+        label: 'variable',
+        type: this.getImplicitType(value),
+        value: this.clearString(value),
+        parent: parent
+    });
+}
+/**
+ * La méthode clearString permet d'enlever les quotes autour de la chaine synthetic
+ */
+$syl.clearString = function(value){
+    if(typeof value == 'string'){
+        value = value.replace(/^('|")|('|")$/g, '');
+    }
+    return value;
+}
+/**
  * en valeurs du langage en cours (javascript dans ce cas)
 */
 $syl.toPrimitiveValue = function(value){
@@ -604,6 +705,73 @@ $syl.toPrimitiveValue = function(value){
     return r;
 }
 /**
+ * La méthode isValidateConstraint permet de vérifier si un type est bien dans une
+ * liste de contrainte
+ */
+$syl.isValidateConstraint = function(type, list){
+    var r = false;
+    for(var i in list){
+        if(list[i].type == type || list[i].type == 'Any'){
+            r = true;
+            break;
+        }
+    }
+    return r;
+}
+/**
+ * La méthode toStringTypes est une méthode extra, permettant de mettre sous forme
+ * de chaine de caractères une liste d'objet de type
+ */
+$syl.toStringTypes = function(list){
+    var r = '', k = 0;
+    for(var i in list){
+        r += (r.length ? ' | ' : '')+list[i].type;
+        k++;
+    }
+    if(k > 1){
+        r = '{ '+r+' }';
+    }
+    return r;
+}
+/**
+ * La méthode toSyntheticString
+*/
+$syl.toSyntheticString = function(value){
+    return ;
+}
+
+/**
+ * La méthode getRelationType permet de savoir le type en priorité pour deux types distincts
+ */
+$syl.getRelationType = function(type1,type2,operator){
+    var r = 'Any';
+    if(type1 == type2 && ['||', '&&', '==', '===', '!=', '!=='].indexOf(operator) < 0){
+        return type1;
+    }
+    switch(operator){
+        case '+':
+        case '+=':
+            if(type1 == 'Array' || type2 == 'Array'){
+                if(['Number', 'Boolean', 'String', 'Regex'].indexOf(type1 == 'Array' ? type2 : type1) >= 0){
+                    r = 'Array';
+                }
+            }
+            else if(type1 == 'String' || type2 == 'String'){
+                r = 'String';
+            }
+            break;
+        case '||':
+        case '&&':
+        case '==':
+        case '!=':
+        case '===':
+        case '!==':
+            r = 'Boolean';
+            break;
+    }
+    return r;
+}
+/**
  * La méthode calc permet de simplifier une opération complexe en une seule valeur
 */
 $syl.calc = function(list){
@@ -613,7 +781,50 @@ $syl.calc = function(list){
     var $this = this,
         compute = {
         "+": function(a,b){
-            return $this.toPrimitiveValue(a) + $this.toPrimitiveValue(b);
+            var r,k= $this.len(a.value);
+            if(a.type == b.type && a.type == 'Array'){
+                r = $this.copy(a);
+                for(var i in b.value){
+                    r.value[k] = b.value[i];
+                    k++;
+                }
+            }
+            else if(a.type == 'Array' || b.type == 'Array'){
+                r = $this.copy(a.type == 'Array' ? a : b);
+                if(
+                    a.type == 'Array' && 
+                    (
+                        !a.constraints ||
+                        (
+                            a.constraints && 
+                            $this.isValidateConstraint(b.type, a.constraints.value)
+                        )
+                    )
+                ){
+                    r.value[k] = b;
+                }
+                else if(
+                    b.type == 'Array' && 
+                    (
+                        !b.constraints ||
+                        (
+                            b.constraints && 
+                            $this.isValidateConstraint(a.type, b.constraints.value)
+                        )
+                    )
+                ){
+                    r.value[k] = a;
+                }
+                else{
+                    r.value = $this.toPrimitiveValue(a) + $this.toPrimitiveValue(b);
+                    r.type = 'Any';
+                    r.implicitType = 'Any';
+                }
+            }
+            else{
+                r = $this.toPrimitiveValue(a) + $this.toPrimitiveValue(b);
+            }
+            return r;
         },
         "-": function(a,b){
             return $this.toPrimitiveValue(a) - $this.toPrimitiveValue(b);
@@ -693,7 +904,7 @@ $syl.calc = function(list){
                     result = compute[list[i]](operands[0], operands[1]);
                     list[k] = $this.meta({
                         label: 'variable',
-                        type: $this.getImplicitType(result),
+                        type: $this.getRelationType(operands[0].type, operands[1].type, list[i]),
                         value: result,
                         parent: operands[1].parent
                     });
@@ -712,7 +923,7 @@ $syl.calc = function(list){
 $syl.value = function(data){
     /**
      * @structure [data]
-     * {object,subvariables,ressources,ternary,subvalue, endbracket}
+     * {object,subvariables,ressources,ternary,subvalue, end, nearconstraints}
      * 
     */
     var $this = this,
@@ -724,136 +935,179 @@ $syl.value = function(data){
             right: false,
             end: false
         },
-        defernow = false;
+        defernow = false,
+        subvariables = {
+            searching: 0,
+            index: 0,
+            key: null
+        },
+        constants = {
+            PARENTHESE: 0,
+            BRACKET: 1,
+            BRACE: 2,
+            COMA: 3,
+            SEMICOLON: 4
+        }, _end, _start, _char, _cursor, _type;
     data.subvariables = this.set(data.subvariables, false);
     data.subvalue = this.set(data.subvalue, false);
-    data.endbracket = this.set(data.endbracket, 0);
+    data.nearconstraints = 'nearconstraints' in data ? data.nearconstraints : data.subvariables ? null : data.object.constraints;
+    data.end = Array.isArray(data.end) ? data.end : [];
     return new Promise(function(res,rej){
         $this.loop(function(cursor,loop){
             /**
              * (*1)Si on attend la partie droite du ternaire, on ignore la partie droite
              * Ou le ternaire principal est terminé, on ignore le reste jusqu'à la fin
              */
-
-    /**
-     * @TRAITEMENT_DES_CARACTERES_DE_DESCISION
-     */
+                _end = [')',']','}',',', ';'].indexOf(cursor.char);
+                _start =  ['(', '[', '{'].indexOf(cursor.char);
             /**
-             * 1) Cas
-             * Si on rencontre un '(' on vérifie si la dernière valeur enregistrée 
-             * est une fonction ou un signe d'opération
-             * 
-             * 2)Cas
-             * Si c'est un '[' on vérifie si la dernière valeur enregistrée est
-             * un soit un tableau, soit une chaine de caractère.
-             * Et dans le cas où c'est un signe ou il n'y a rien, on procède à
-             * l'enregistrement d'un tableau
+             * @TRAITEMENT_DES_META_STRUCTURES (Array, JSON)
             */
-            if(['(','['].indexOf(cursor.char) >= 0){
-                /**
-                 * S'il y a un mot non-enregistré, on l'enregistre d'abord avant
-                 * d'effectuer le traitement
-                */
-                if(cursor.word && cursor.word.length){
-                    defernow = true;
-                }
-                else{
-                    /**
-                     * Si c'est un signe ou il n'y avait pas de valeur précédente
-                     * on enregistre une sous-valeur
-                    */
-                    if(
-                        //Si c'est un '('
-                        (cursor.char == '(' && (
-                            !values.length || Synthetic.Lang.signs.indexOf(values[values.length - 1]) >= 0)
-                        ) ||
-                        //Si c'est un '['
-                        (cursor.char == '[' && 
-                            values.length && Synthetic.Lang.signs.indexOf(values[values.length - 1]) < 0
-                        )
-                    ){
-                        /**
-                         * Si on prend en compte le '[' et que la valeur précédente n'est pas
-                         * une chaine de caractère ou tableau, on soulève une erreur
-                         */
-                        if(cursor.char == '[' && ['String','Array'].indexOf($this.getType(values[values.length - 1])) < 0){
-                            throw new Error($this.err("illegal character [ "+cursor.char+"]"));
-                        }
-                        loop.stop();
-                        $this.cursor.index++;
-                        $this.value({
-                            object : data.object,
-                            subvariables: data.subvariables,
-                            ressources: data.ressources,
-                            ternary: data.ternary,
-                            subvalue: true,
-                            endbracket: cursor.char == '['
-                        }).then(function(result){
-                            if(cursor.char == '['){
-                                var val = $this.toPrimitiveValue(values[values.length - 1])[result.value];
-                                values[values.length - 1].type = $this.getImplicitType(val);
-                                values[values.length - 1].value = val;
-                                console.log('[VAL]',val, values);
-                            }
-                            else{
-                                values.push(result);
-                            }
-                            waitingForNextOperand = false;
-                            loop.start();
-                        });
-                    }
-                    //Si c'est une fonction, on l'appelle comme un littéral
-                    else if(values[values.length - 1]){
-                        
-                    }
-                    //Sinon on déclenche une erreur
-                    else{
-                        throw new Error($this.err("illegal character [ "+cursor.char+"]"));
-                    }
-                }
-            }
-            else if(cursor.char == ')'){
-                if(data.subvalue){
-                    $this.cursor.index++;
-                    loop.end();
-                }
-                else{
-                    throw new Error($this.err("illegal character [ "+cursor.char+"]"));
-                }
-            }
-    /**
-     * @FIN_DU_TRAITEMENT
-     */
             /**
-             * Si on rencontre un caractère qui succède un non signe sans aucune
-             * attente d'opérande, on met fin à la lecture de valeur
-             * ou on déclenche une erreur si on est en attente d'une partie de ternaire
+             * Si on cherche des sous variables simples, 
+             * on est en mode méta structure de valeur
              */
+            // console.log('[SUBVARIABLES]', cursor.char,'->',$this.cursor.index);
+            if(subvariables.searching && (subvariables.key != null || subvariables.searching == 1) ){
+                loop.stop();
+                /**
+                 * La lecture lit tout une chaine de caractère avant de passer au callback
+                 * Dans ce cas:
+                 *  - Une chaine de caractère sera donnée dans la valeur cursor.word
+                 *  - On doit le prendre en compte, sinon ça risque de causer des résultats
+                 *    imprévus
+                 *  - mais si cursor.word n'est pas null et n'est pas une chaine de
+                 *    de caractère, on doit soulever une exception
+                 */
+                if(cursor.word){
+                    if($this.getCodeType(cursor.word) != Synthetic.Lang.constants.STRING){
+                        throw new Error("Syntax error !");
+                    }
+                    if(subvariables.searching == 1){
+                        values[values.length - 1].value[subvariables.index] = $this.toVariableStructure(cursor.word,data.ressources.parent);
+                    }
+                    else{
+                        values[values.length - 1].value[subvariables.key] = $this.toVariableStructure(cursor.word,data.ressources.parent);
+                    }
+                    subvariables.key = null;
+                    subvariables.index++;
+                    /**
+                     * Ça peut arriver que le EOS est un espace
+                     * Il faut alors trouver immédiatement le prochaine caractère
+                     * non-blanc pour ne pas attendre le prochain tour de la boucle
+                     */
+                    $this.toNextChar().then(function(_char){
+                        if( (_char == '}' && subvariables.searching == 2) || (_char == ']' && subvariables.searching == 1) ){
+                            subvariables.searching = 0;
+                            subvariables.key = null;
+                            subvariables.index = 0;
+                        }
+                        loop.start();
+                    });
+                }
+                else{
+                    _cursor = $this.copy($this.cursor);
+                    // console.log('[SUBVARIABLES]',data.subvariables, $this.code.substr($this.cursor.index,2));
+                    $this.value({
+                        object : data.object,
+                        subvariables: true,
+                        ressources: data.ressources,
+                        ternary: data.ternary,
+                        subvalue: true,
+                        nearconstraints: data.object.constraints,
+                        end: [constants.COMA, subvariables.searching > 1 ? constants.BRACE : constants.BRACKET]
+                    }).then(function(result){
+                        // console.log('[Constraints]',data.nearconstraints,_cursor);
+
+                        if(subvariables.searching == 1){
+                            values[values.length - 1].value[subvariables.index] = result;
+                        }
+                        else{
+                            if(subvariables.key == null && result.name == null){
+                                throw new Error("can't defined JSON key from null");
+                            }
+                            values[values.length - 1].value[subvariables.key == null ? result.name : subvariables.key] = result;
+                        }
+                        _char = $this.code[$this.cursor.index - 1];
+                        // console.log('[SUBRESULT]',subvariables.searching,data.subvariables,'/',subvariables.searching,'/',_char,$this.cursor.index,result);
+                        // console.log('[SUBRESULT]',_char,$this.cursor.index, $this.code.substr($this.cursor.index, 2),result);
+                        subvariables.key = null;
+                        subvariables.index++;
+                        if( (_char == '}' && subvariables.searching == 2) || (_char == ']' && subvariables.searching == 1) ){
+                            subvariables.searching = 0;
+                            subvariables.key = null;
+                            subvariables.index = 0;
+                        }
+
+                        if(_char == ';' 
+                        // || ( data.subvariables && data.end.indexOf( [null,']','}',null, ';'].indexOf(_char) ) >= 0) 
+                        ){
+                            loop.end();
+                        }
+                        else{
+                            if(_char == ','){
+                                $this.cursor.index--;
+                            }
+                            loop.start();
+                        }
+                    });
+                }
+                return;
+            }
+            /**
+             * @FIN_DE_TRAITEMENT
+            */
+            /**
+             * Si on rencontre un caractère qui succède un non signe 
+             * 1er Cas) sans aucune attente d'opérande, on met fin à la lecture 
+             *          de valeur
+             * 2e Cas)  si on est en attente d'une partie de ternaire 
+             *          on déclenche une erreur
+             * 3e Cas) Si on est en recherche de clé de DICTIONNAIRE (sous-variable)
+             *         et la prochaine clé a déjà été définie, on lève une exception
+             */
+            // console.log('end...', _end, data.end, cursor.char, values.length, data.subvariables);
             if(
-                [' ', ';'].indexOf(cursor.char) < 0 && 
+                /[\S]/.test(cursor.char) && data.end.indexOf(_end) < 0 && 
                 values.length && !waitingForNextOperand && !ternaryOperator.active &&
                 Synthetic.Lang.signs.indexOf(cursor.char) < 0
             ){
-                console.log('[end]', values, cursor.char);
-                $this.cursor.index--;
-                loop.end();
+                if(subvariables.searching){
+                    if(subvariables.key != null){
+                        throw new Error($this.err("syntax error !"));
+                    }
+                }
+                else{
+                    // console.log('[end]', values, '|',cursor.char,'|');
+                    $this.cursor.index--;
+                    loop.end();
+                }
             }
+            /**
+             * Dans la recherche des valeurs, on veut des mots, et pour chaque mot
+             * non vide trouvé, on cherche son type pour le traiter soit en tant que:
+             * - Littéral
+             * - Nombre ou autre type de valeur
+             */
             if(cursor.word && cursor.word.length){
-                if($this.getCodeType(cursor.word) == Synthetic.Lang.constants.LITTERAL){
-                    console.log('[Litt]')
+                if($this.getCodeType(cursor.word) == Synthetic.Lang.constants.LITTERAL && !subvariables.searching ){
+                    console.log('[Litt]');
                     //(*1)
                     if(!ternaryOperator.end && (!ternaryOperator.active || !ternaryOperator.right) ){
                         /**
                          * S'il y a une opération à faire, il faut attendre le type de la variable
                          * avant de déclencher une action appropriée
                         */
+                       loop.stop();
                         $this.litteral(cursor.word, data.ressources).then(function(result){
                             values.push(result);
                             waitingForNextOperand = false;
+                            loop.start();
                         });
                     }
                 }
                 else{
+                    // console.log('[WORD]',cursor.word);
                     var type = $this.getImplicitType(cursor.word);
                     /**
                      * S'il y a une opération à faire avant l'enregistrement de la valeur
@@ -879,12 +1133,7 @@ $syl.value = function(data){
                     }
                     //(*1)
                     if(!ternaryOperator.end && (!ternaryOperator.active || !ternaryOperator.right) ){
-                        values.push($this.meta({
-                            label: 'variable',
-                            type: type,
-                            value: cursor.word+'',
-                            parent: data.ressources.parent
-                        }));
+                        values.push($this.toVariableStructure(cursor.word+'',data.ressources.parent));
                     }
                     waitingForNextOperand = false;
                 }
@@ -893,8 +1142,14 @@ $syl.value = function(data){
             if(Synthetic.Lang.signs.indexOf(cursor.char) >= 0){
                 // console.log('[Values]',values,waitingForNextOperand);
                 if((values.length || ternaryOperator.active) && !waitingForNextOperand){
-                    //Si c'est un '?' on prend en compte un opérateur ternaire
-                    if(cursor.char == '?'){
+                    /**
+                     * Si c'est un '?' on prend en compte un opérateur ternaire
+                     * 
+                     * CAS 2:
+                     * Si on est en mode recherche de sous-variable dans le même niveau d'itération
+                     * on bloque les '?'
+                     */
+                    if(cursor.char == '?' && !subvariables.searching){
                         ternaryOperator.active++;
                         //(*1)
                         if(!ternaryOperator.end && (!ternaryOperator.active || !ternaryOperator.right) ){
@@ -903,7 +1158,7 @@ $syl.value = function(data){
                             values = [];
                             calc = ['false', false, 0, '0'].indexOf(calc) < 0;
                             if(calc){
-                                console.log('[Calc] again !', calc);
+                                // console.log('[Calc] again !', calc);
                                 loop.stop();
                                 $this.cursor.index++;
                                 $this.value({
@@ -912,7 +1167,7 @@ $syl.value = function(data){
                                     ressources: data.ressources,
                                     ternary: true,
                                     subvalue: data.subvalue,
-                                    endbracket: data.endbracket
+                                    end: data.end
                                 }).then(function(result){
                                     values = [result];
                                     ternaryOperator.active--;
@@ -926,22 +1181,43 @@ $syl.value = function(data){
                         }
                     }
                     else if(cursor.char == ':'){
-                        ternaryOperator.active--;
-                        /**
-                         * si le décompteur est négatif on vérifie si on avait
-                         * demandé une partie ternaire pour terminer la partie
-                         * sinon on déclenche une erreur
-                        */
-                        if(ternaryOperator.active == -1){
-                            if(data.ternary){
-                                loop.end();
+                        if(subvariables.searching){
+                            subvariables.key = $this.toPrimitiveValue(values[values.length - 1]);
+                            subvariables.keytype = $this.getCodeType(subvariables.key);
+                            subvariables.keytype = subvariables.keytype == 0 || subvariables.keytype ==  1 ? 2 : subvariables.keytype;
+                            subvariables.keytype = $this.set(Synthetic.Lang.typeFromConstants[subvariables.keytype], 'Any');
+                            if(data.object.constraints && !$this.isValidateConstraint(subvariables.keytype, data.object.constraints.key)){
+                                throw new Error($this.err($this.toStringTypes(data.object.constraints.key)+" key type expected, "+subvariables.keytype+" given !"));
                             }
-                            else{
-                                throw new Error($this.err("illegal operator sign [ "+cursor.char+"]"));
+                            /**
+                             * Le type de la clé doit être soit:
+                             * - String
+                             * - Number
+                             * - Boolean (qui sera implicitement converti en String)
+                            */
+                            if(['String', 'Number', 'Boolean'].indexOf(subvariables.keytype) < 0){
+                                throw new Error($this.err("[String | Number] type expected, "+subvariables.keytype+" given !"))
                             }
+                            values.pop();
                         }
-                        else if(!ternaryOperator.active == 0){
-                            ternaryOperator.right = false;
+                        else{
+                            ternaryOperator.active--;
+                            /**
+                             * si le décompteur est négatif on vérifie si on avait
+                             * demandé une partie ternaire pour terminer la partie
+                             * sinon on déclenche une erreur
+                            */
+                            if(ternaryOperator.active == -1){
+                                if(data.ternary){
+                                    loop.end();
+                                }
+                                else{
+                                    throw new Error($this.err("illegal operator sign [ "+cursor.char+"]"));
+                                }
+                            }
+                            else if(!ternaryOperator.active == 0){
+                                ternaryOperator.right = false;
+                            }
                         }
                     }
                     else{
@@ -952,7 +1228,7 @@ $syl.value = function(data){
                         waitingForNextOperand = true;
                     }
                 }
-                else if(['-', '+', '++', '--'].indexOf(cursor.char) >= 0){
+                else if(['-', '+', '++', '--'].indexOf(cursor.char) >= 0 && !subvariables.searching){
                     if(cursor.char == '+'){
                         preOperations = Synthetic.Lang.simpleOperations.POSITIVE;
                     }
@@ -967,30 +1243,150 @@ $syl.value = function(data){
                     }
                 }
                 else{
-                    console.log('[Err]',values);
+                    // console.log('[Err]',values, subvariables);
                     throw new Error($this.err("illegal operator sign [ "+cursor.char+"]"));
                 }
             }
-            if(cursor.char == ';'){
+            //Si le caractère est un caractère de fin de recherche d'instruction
+            if(_end >= constants.PARENTHESE){
+                // console.log('[CHAR]',cursor.char, _end, $this.cursor.index);
                 if(waitingForNextOperand){
                     throw new Error($this.err("right operand expected"));
                 }
-                if(!data.subvariables && !ternaryOperator.active){
+                if(data.end.indexOf(_end) >= 0 || 
+                    (!data.subvariables && !ternaryOperator.active && _end == constants.SEMICOLON) ||
+                    (data.subvariables && (data.end.indexOf(_end) || _end == constants.SEMICOLON) )
+                ){
+                    $this.cursor.index++;
                     loop.end();
                 }else{
-                    throw new Error($this.err("illegal end of statement [ ; ]"));
+                    // console.log('[data]', data.end, data.subvariables,_end, constants.SEMICOLON,values);
+                    throw new Error($this.err("illegal end of statement [ "+cursor.char+" ]"));
                 }
             }
             if(defernow){
                 defernow = false;
                 $this.cursor.index--;
             }
+
+    /**
+     * @TRAITEMENT_DES_CARACTERES_DE_DESCISION
+     */
+            /**
+             * 1) Cas
+             * Si on rencontre un '(' on vérifie si la dernière valeur enregistrée 
+             * est une fonction ou un signe d'opération
+             * 
+             * 2)Cas
+             * Si c'est un '[' on vérifie si la dernière valeur enregistrée est
+             * un soit un tableau, soit une chaine de caractère.
+             * Et dans le cas où c'est un signe ou il n'y a rien, on procède à
+             * l'enregistrement d'un tableau
+            */
+            //  console.log('[GO]',_start, cursor.char);
+             if(_start >= constants.PARENTHESE && _start <= constants.BRACE){
+                //  console.log('[CHECK]');
+                /**
+                 * S'il y a un mot non-enregistré, on l'enregistre d'abord avant
+                 * d'effectuer le traitement
+                */
+                if(cursor.word && cursor.word.length){
+                    defernow = true;
+                }
+                else{
+                    /**
+                     * Si c'est un signe ou il n'y avait pas de valeur précédente
+                     * on enregistre une sous-valeur
+                    */
+                    if(
+                        //Si c'est un '('
+                        (_start == constants.PARENTHESE && (
+                            !values.length || Synthetic.Lang.signs.indexOf(values[values.length - 1]) >= 0)
+                        ) ||
+                        //Si c'est un '['
+                        (_start == constants.BRACKET && 
+                            values.length && Synthetic.Lang.signs.indexOf(values[values.length - 1]) < 0
+                        )
+                    ){
+                        /**
+                         * Si on prend en compte le '[' et que la valeur précédente n'est pas
+                         * une chaine de caractère ou tableau ou un JSON, on soulève une erreur
+                         */
+                        if(_start == constants.BRACKET && ['String','Array', 'JSON'].indexOf($this.getType(values[values.length - 1])) < 0){
+                            throw new Error($this.err("illegal character [ "+cursor.char+"]"));
+                        }
+                        loop.stop();
+                        $this.cursor.index++;
+                        $this.value({
+                            object : data.object,
+                            subvariables: data.subvariables,
+                            ressources: data.ressources,
+                            ternary: data.ternary,
+                            subvalue: true,
+                            end: [constants.PARENTHESE]
+                        }).then(function(result){
+                            if(_start == constants.BRACKET){
+                                var val = $this.toPrimitiveValue(values[values.length - 1])[result.value];
+                                values[values.length - 1].value = val;
+                            }
+                            else{
+                                values.push(result);
+                            }
+                            waitingForNextOperand = false;
+                            loop.start();
+                        });
+                    }
+                    else if(_start >= constants.BRACKET && _start <= constants.BRACE && (!values.length || waitingForNextOperand) ){
+                        // console.log('[CHECK]',data.nearconstraints);
+                        /**
+                         * Si la structure n'accepte pas d'imbrication de structure
+                         * Et qu'il ne demande pas une structure comme contrainte de clé ou de valeur
+                         * On soulève une exception.
+                         */
+                        if(data.subvariables && (data.object.constraints == null || !data.object.constraints.recursive) ){
+                            throw new Error($this.err("Denied structure syntax !"));
+                        }
+                        _type = _start == constants.BRACKET ? 'Array' : 'JSON';
+                        values.push($this.meta({
+                            type: _type,
+                            constraints: data.object.type == _type ? data.object.constraints : null,
+                            label: 'variable',
+                            value: {},
+                            parent: data.ressources.parent
+                        }));
+                        subvariables.searching = _start == constants.BRACKET  ? 1 : 2;
+                        subvariables.index = 0;
+                        subvariables.key = null;
+                    }
+                    //Si c'est une fonction, on l'appelle comme un littéral
+                    else if(values[values.length - 1]){
+                        
+                    }
+                    //Sinon on déclenche une erreur
+                    else{
+                        throw new Error($this.err("illegal character [ "+cursor.char+"]"));
+                    }
+                }
+            }
+        /**
+         * @FIN_DU_TRAITEMENT
+         */
         }).then(function(){
             var r = $this.calc(values);
-            console.log('[Result]',r);
+            // console.log('[DATA]',values);
+            if(!data.subvariables && !data.subvalue && r.type != data.object.type && r.implicitType != data.object.type){
+                $this.cursor = data.object.cursor;
+                throw new Error($this.err(data.object.type+" value expected, "+r.implicitType+" given !"));
+            }
+            else if(data.subvariables && data.object.constraints && !$this.isValidateConstraint(r.type, data.object.constraints.value)){
+                if(['Array', 'JSON'].indexOf(r.type) < 0 || !data.object.constraints.recursive){
+                    throw new Error($this.err($this.toStringTypes(data.object.constraints.value)+" value expected, "+r.type+" given !"));
+                }
+            }
+            $this.garbage();
             res(r);
         })
-    })
+    });
 }
 /**
  * La méthode parse est la partie principale de l'interpréteur de syntax synthétic
@@ -1296,6 +1692,9 @@ $syl.attachToCurrentBlock = function(ref){
 $syl.getCloserStruct = function(cursor){
     var previous = this.previousCloserRef(cursor),
         object, r = null;
+    if(previous == null){
+        return  '0,0';
+    }
     while(r==null){
         if(previous in this.modules){
             object = this.modules[previous];
@@ -1345,6 +1744,7 @@ $syl.litteral = function(litteral,ressources){
                         ressources:ressources,
                         ternary: false
                     }).then(function(result){
+                        console.log('[LITTERAL] result', result);
                         loop.start();
                     });
                 }

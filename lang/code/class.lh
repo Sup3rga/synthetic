@@ -1,4 +1,17 @@
-private final class Person{
+// private final class Person{
     /* Bonjour */
-    Array< ... ,String> age = "Bonjour"[3];
-}
+    // JSON<String> age = {
+    //     hi: "Bonjour !",
+    //     cool: {
+    //         test: "Hi !"
+    //     }
+    // }
+    // JSON<Any> age = {
+    //     false : 12
+    // }
+    // JSON<...> test = {cool: "bien", test: {ok: "cool"}};
+    Array tab = [
+        'ok',
+        'Bonjour'
+    ] + 4
+// }

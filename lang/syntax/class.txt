@@ -25,5 +25,5 @@ class Person{ [0,5]
 
 class Person{
     static Array<Number> ids = [];
-    static ternary = 4 + 5 < 6 ? 4 - 1 < 2 ? 40 : 2 : 3 + 4;
+    static ternary = [1 4, 43];
 }
