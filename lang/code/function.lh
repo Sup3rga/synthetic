@@ -1,3 +1,8 @@
-presenter(String nom ){
-
+// bien = int("50")
+//Appelation
+// debug (bien)
+presenter(String nom : "bien"){
+    print nom
 }
+
+presenter "Bien !"
