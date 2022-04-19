@@ -1,8 +1,8 @@
 object = "bien"
 
-if object=="bien" {
-
+if object!= "bien" {
+    print "Hello !"
 }
 else{
-    
+    print "World !"
 }
