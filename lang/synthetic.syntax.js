@@ -2039,7 +2039,7 @@ $syl.native = function(serial,args,ressources){
                     r += r.length > 1 && array > 1 ? '\n' : '';
                 }
                 else{
-                    r += e.type == 'String' && n > 0 ? '"'+e.value+'"' : e.value;
+                    r += e.type == 'String' || e.implicitType == 'String' && n > 0 ? '"'+e.value+'"' : e.value;
                 }
                 r += array > 0 ? array ==  1 ? ']' : '}' : '';
                 return r;
@@ -2539,7 +2539,7 @@ $syl.litteral = function(litteral,ressources){
             parent: this.set(ressources.parent,null)
         }),
         resultValue = exist ? syntObject :null,_cursor;
-        // console.log('[Serial]',litteral,exist);
+        console.log('[Serial]',litteral,exist);
         // previous = exist ? null : this.getCloserStruct([serial.cursor.scope,serial.cursor.index]);
         // console.log('[Ok]');
     return new Promise(function(res){
@@ -2556,7 +2556,15 @@ $syl.litteral = function(litteral,ressources){
                     nextWord += cursor.char;
                 }
                 else{
-                    console.log('[Cool]', nextWord, resultValue);
+                    if(nextWord in resultValue.value){
+                        resultValue = resultValue.value[nextWord];
+                    }
+                    else{
+                        resultValue = null;
+                    }
+                    nextWord = '';
+                    // _cursor = $this.copy($this.cursor);
+                    // console.log('[Cool]', $this.code.substr($this.cursor.index, 10));
                 }
             }
             $this.toNextChar().then(function(_char){
@@ -2567,24 +2575,36 @@ $syl.litteral = function(litteral,ressources){
                 }
                 //Si on a un opérateur '=', on passe à une affectation
                 if(cursor.char == '='){
-                    if(exist){
-                        throw new Error($this.err("trying to override defined object [ "+litteral+"]"));
-                    }
+                    // if(exist){
+                    //     throw new Error($this.err("trying to override defined object [ "+litteral+"]"));
+                    // }
                     $this.goTo(1);
                     // console.log('[Serial]',litteral,serial);
                     // loop.stop();
                     $this.value({
-                        object: serial, 
+                        object: exist ? resultValue : serial, 
                         subvariables: false, 
                         ressources:ressources,
                         ternary: false
                     }).then(function(result){
-                        // console.log('[result]',litteral,'/',result, $this.executing);
-                        $this.extendElse(serial, result);
-                        serial.implicitType = result.implicitType;
-                        // console.log('[cursor]',serial);
-                        created = true;
-                        resultValue = serial;
+                        // console.log('[result]',litteral,dotted,exist,'/',result, $this.executing);
+                        if(exist){
+                            var tmp = {
+                                name : resultValue.visible,
+                                visible : resultValue.visible
+                            };
+                            $this.extend(resultValue, result,true);
+                            resultValue.name = tmp.name;
+                            resultValue.visible = tmp.visible;
+                        }
+                        else{
+                            $this.extendElse(serial, result);
+                            serial.implicitType = result.implicitType;
+                            // console.log('[cursor]',$this.cursor.index);
+                            _cursor = $this.copy($this.cursor);
+                            created = true;
+                            resultValue = serial;
+                        }
                         loop.end();
                     });
                 }
@@ -2641,13 +2661,30 @@ $syl.litteral = function(litteral,ressources){
                     });
                 }
                 else if(cursor.char == '.'){
+                    if(dotted){
+                        /**
+                         * Il est hormis d'avoir deux points consécutifs
+                         */
+                        if(!nextWord.length){
+                            throw new Error($this.err("invalid syntax !"));
+                        }
+                        if(nextWord in resultValue.value){
+                            resultValue = resultValue.value[nextWord];
+                        }
+                        else{
+                            resultValue = null;
+                        }
+                        // console.log('[Nextword]',nextWord);
+                    }
+                    // console.log('[Nextword]',nextWord);
+                    nextWord = '';
                     dotted = true;
                     $this.cursor.index++;
                     loop.start();
                 }
                 else{
                     // resultValue = resultValue == null ? $this.find(litteral) : resultValue;
-                    // console.log('[END LITT]', litteral, exist, created, $this.code.substr($this.cursor.index, 10));
+                    // console.log('[END LITT]', litteral, exist, created, $this.cursor.index, $this.code.substr($this.cursor.index, 10));
                     if(!exist && $this.executing && !created /*&& resultValue == null*/){
                         // console.log('[Litteral]',resultValue,$this.cursor,dotted);
                         throw new Error($this.err("[ "+litteral+" ] is undefined !"));
@@ -2666,7 +2703,7 @@ $syl.litteral = function(litteral,ressources){
                      *  * d'un caractère si la longueur est 1
                      *  * de la totalité de la longueur sinon
                      */
-                    console.log('[Dotted]',dotted,nextWord);
+                    // console.log('[Dotted]',dotted,nextWord);
                     if(!dotted || (dotted && $this.getCodeType(nextWord) != Synthetic.Lang.constants.LITTERAL)){
                         // console.log('[Done]',dotted,nextWord, cursor.char);
                         if(cursor.char.length && /[\S]+/.test(cursor.char)){
@@ -2682,7 +2719,7 @@ $syl.litteral = function(litteral,ressources){
                 }
             });
         }).then(function(){
-            // console.log('[Result]', $this.code[$this.cursor.index]);
+            // console.log('[Result]', resultValue);
             if($this.code[$this.cursor.index] == '}'){
                 // console.log('[litt][}]',$this.cursor.scope);
                 $this.fixScope(true);
