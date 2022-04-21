@@ -37,3 +37,8 @@ if(age >= 18){ [0,150]*
       enregistrés, en faisant la même opération qu'avec les scopes
     - on considérera le plus grand index qui est inférieur à l'index de l'instruction
     - si l'opération n'a pas réussi, on progresse au scope suivant jusqu'à la racine [0,0]
+
+//--------- EOS : End Of Statement --------
+
+-- Value
+  Pour les value

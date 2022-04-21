@@ -808,7 +808,7 @@ $syl.getCodeType = function(code){
     else if(/^\/\/([\S ]+)?\n?$|^\/\*([\s\S]+?)\*\/$/.test(code)){
         type = Synthetic.Lang.constants.COMMENT;
     }
-    else if(/^[a-z_$]([a-z0-9_]+)?$/.test(code)){
+    else if(/^[a-z_$]([a-z0-9_]+)?$/i.test(code)){
         type = Synthetic.Lang.constants.LITTERAL;
     }
     return type;
@@ -854,7 +854,7 @@ $syl.toPrimitiveValue = function(value){
             r = value.value == 'true';
         break;
         case 'String':
-            r = value.value.replace(/^('|")|('|")$/g, '');
+            r = (value.value+"").replace(/^('|")|('|")$/g, '');
         break;
         default:
             r = value.value;
@@ -1106,16 +1106,19 @@ $syl.struct = function(data){
             label: 'variable',
             value: {},
             parent: data.ressources.parent
-        }), key = null, index = 0,_cursor;
+        }), key = null, index = 0,_cursor = $this.copy($this.cursor);
         // $this.goTo(1);
         $this.loop(function(cursor,loop){
+            // console.log('[Struct]', cursor);
             if(_type == 'Array' || key != null){
                 loop.stop();
                 if(['[', '{'].indexOf(cursor.char) >= 0){
                     $this.goTo(1);
                 }
+                if(cursor.word && cursor.word.length){
+                    $this.cursor = $this.copy(_cursor);
+                }
                 _cursor = $this.copy($this.cursor);
-
                 $this.value({
                     object: data.object,
                     subvariables: true,
@@ -1140,8 +1143,9 @@ $syl.struct = function(data){
                     switch($this.code[$this.cursor.index-1]){
                         case ',':
                             if(/[\S]+/.test($this.code[$this.cursor.index])){
-                                $this.backTo(1);
+                                // $this.backTo(1);
                             }
+                            _cursor = $this.copy($this.cursor);
                         break;
                         case ']':
                         case '}':
@@ -1185,6 +1189,8 @@ $syl.struct = function(data){
                          */
                         if(_char == ':'){
                             key = $this.clearString(cursor.word);
+                            $this.cursor.index++;
+                            _cursor = $this.copy($this.cursor);
                             loop.start();
                         }
                         /**
@@ -1211,7 +1217,11 @@ $syl.struct = function(data){
                                     structure.value[result.name] = result;
                                     if($this.code[$this.cursor.index] == '}'){
                                         loop.end();
+                                        return;
                                     }
+                                    loop.start();
+                                    $this.cursor.index++;
+                                    _cursor = $this.copy($this.cursor);
                                 });
                             }
                             /**
@@ -1225,6 +1235,7 @@ $syl.struct = function(data){
                 }
             }
         }).then(function(){
+            // console.log('[Struct]',structure);
             res(structure);
         })
     });
@@ -1248,9 +1259,11 @@ $syl.ternary = function(data){
                 }
                 $this.value({
                     object: data.object,
+                    subvariables: true,
                     ressources: data.ressources,
                     end: [EOS.ELSE]
                 }).then(function(value){
+                    // console.log('[Cool]',value, $this.code.substr($this.cursor.index, 10))
                     if(data.reason){
                         result = value;
                         $this.executing = false;
@@ -1261,6 +1274,7 @@ $syl.ternary = function(data){
                     if($this.code[$this.cursor.index] != ':'){
                         throw new Error($this.err("[ : ] expected !"));
                     }
+                    $this.goTo(1);
                     end = true;
                     pass = true;
                     loop.start();
@@ -1271,11 +1285,13 @@ $syl.ternary = function(data){
                 $this.value({
                     object: data.object,
                     ressources: data.ressources,
+                    subvariables: true,
                     end: data.end
                 }).then(function(value){
                     if(!data.reason){
                         result = value;
                     }
+                    $this.executing = executing;
                     loop.end();
                 });
             }
@@ -1336,7 +1352,7 @@ $syl.value = function(data){
                  * Si le mot est un litteral, on cherche sa valeur
                  */
                 _type = $this.getCodeType(cursor.word);
-                // console.log('[Val][Word]',cursor.word,cursor.char);
+                // console.log('[Val][Word]',cursor.word,cursor.char+'<');
                 if(_type == Synthetic.Lang.constants.LITTERAL){
                     loop.stop();
                     if(/[\S]+/.test(cursor.char)){
@@ -1398,7 +1414,15 @@ $syl.value = function(data){
              * Si on voit un signe d'opération on vérifie si sa place est correcte
              */
             if(Synthetic.Lang.signs.indexOf(cursor.char) >= 0){
-                // console.log('[Sign]',cursor.char);
+                // console.log('[Sign]',cursor.char,data.end, _end);
+                /**
+                 * Il faut vérifier d'abord que le signe n'est pas un EOS
+                 * par exemple: le cas de ":"
+                 */
+                 if(data.end.indexOf(_end) >= 0){
+                    loop.end();
+                    return;
+                }
                 /**
                  * Il faut d'abord vérifier qu'il n'y a pas d'operande en attente et que
                  * le tableau temporaire des valeurs ne soient pas vide
@@ -1431,10 +1455,10 @@ $syl.value = function(data){
                      * Ça peut arriver que le signe soit considéré comme un EOS
                      * par exemple le ":", alors dans ce cas, on termine la lecture
                      */
-                    else if(data.end.indexOf(_end) >= 0){
-                        loop.end();
-                        return;
-                    }
+                    // else if(data.end.indexOf(_end) >= 0){
+                    //     loop.end();
+                    //     return;
+                    // }
                     /**
                      * Sinon on ajoute le signe pour faire le calcul plus tard
                      */
@@ -1492,10 +1516,10 @@ $syl.value = function(data){
                 values.length && !waitingForNextOperand &&
                 Synthetic.Lang.signs.indexOf(cursor.char) < 0
             ){
-                if(data.end.indexOf(_end) < 0 && _end != constants.SEMICOLON && /[\S]+/.test(cursor.char)){
+                if(data.end.indexOf(_end) < 0 && Synthetic.Lang.blockEOS.indexOf(cursor.char) < 0 && _end != constants.SEMICOLON && /[\S]+/.test(cursor.char)){
                     $this.backTo(1);
                 }
-                // console.log('[END]',_end,cursor.char);
+                // console.log('[END]',_end,cursor.char, Synthetic.Lang.blockEOS.indexOf(cursor.char));
                 loop.end();
                 return;
             }
@@ -1520,7 +1544,6 @@ $syl.value = function(data){
             */
             //  console.log('[GO]',_start, cursor.char);
              if(_start >= constants.PARENTHESE && _start <= constants.BRACE){
-                //  console.log('[CHECK]');
                 /**
                  * S'il y a un mot non-enregistré, on l'enregistre d'abord avant
                  * d'effectuer le traitement
@@ -1616,7 +1639,9 @@ $syl.value = function(data){
          * @FIN_DU_TRAITEMENT
          */
         }).then(function(){
+            // console.log('[Values]',values);
             var r = $this.executing ? $this.calc(values) : null;
+            // console.log('[R]',r,data.subvariables);
             if($this.executing && !data.subvariables && !data.subvalue && data.object.type != 'Any' && r.type != data.object.type && r.implicitType != data.object.type){
                 $this.cursor = data.object.cursor;
                 throw new Error($this.err(data.object.type+" value expected, "+r.implicitType+" given !"));
@@ -1994,10 +2019,35 @@ $syl.native = function(serial,args,ressources){
         'setState'
          */
         var natives = {
+            tab: function(n){
+                var r = '';
+                for(var i = 0; i < n; i++){
+                    r += '\t';
+                }
+                return r;
+            },
+            struct: function(e,n){
+                var n = $this.set(n,0),
+                    array = e.type == 'Array' ? 1 : e.type == 'JSON' ? 2 : 0;
+                    r = array > 0 ? array == 1 ? '[' : '{' : '';
+                // console.log('[arg]',e);
+                if(array > 0){
+                    for(var i in e.value){
+                        r += r.length == 1 && array > 1 ? '\n' : '';
+                        r += (r.length > 2 ? "," : "")+(array > 1 ? " "+this.tab(n) : "")+(array == 1 ? "": i+":")+this.struct(e.value[i], n+1);
+                    }
+                    r += r.length > 1 && array > 1 ? '\n' : '';
+                }
+                else{
+                    r += e.type == 'String' && n > 0 ? '"'+e.value+'"' : e.value;
+                }
+                r += array > 0 ? array ==  1 ? ']' : '}' : '';
+                return r;
+            },
             print: function(args){
                 var r = '';
                 for(var i in args){
-                    r += (r.length ? ' ' : '')+args[i].value; 
+                    r += (r.length ? ' ' : '')+this.struct(args[i]); 
                 }
                 console.log(r);
                 return null;
@@ -2051,7 +2101,7 @@ $syl.caller = function(callable,ressources){
                          */
                         cursor = $this.copy($this.cursor);
                         $this.cursor = $this.copy(callable.scopeCursor);
-                        $this.cursor.index++;
+                        // $this.cursor.index++;
                         $this.parse(ressources,{
                             end: callable.braced ? [Synthetic.Lang.constants._EOS.BRACE] : [],
                             statementCount: callable.braced ? -1 : 1
@@ -2080,21 +2130,32 @@ $syl.arguments = function(serial,ressources, calling){
         calling = $this.set(calling, false);
     return new Promise(function(res){
         var _arguments = {},
-            arg, index = 0, _cursor,
+            arg, index = 0, _cursor, _arg,
             withParenthese = 0;
+        function getArg(n,notNull){
+            notNull = $this.set(notNull,false)
+            for(var i in serial.arguments){
+                if(serial.arguments[i].index == n){
+                    return $this.copy(serial.arguments[i],true);
+                }
+                if(serial.arguments[i].name == n){
+                    return $this.copy(serial.arguments[i],true);
+                }
+            }
+            return notNull ? {} : null;
+        }
         function resetArg(){
             var r = $this.meta({
                 label: 'argument',
                 type: 'Any',
                 implicitType: 'Any',
-                value: null
-            },false);
+                value: null,
+                unset: false,
+                constant: false
+            },false),_r;
             if(calling){
-                for(var i in serial.arguments){
-                    if(serial.arguments[i].index == index){
-                        return $this.copy(serial.arguments[i],true);
-                    }
-                }
+                _r = getArg(index);
+                r = _r ? _r : r;
             }
             return r;
         }
@@ -2102,6 +2163,9 @@ $syl.arguments = function(serial,ressources, calling){
         function finishSavingArgument(cursor,loop,_res){
             // console.log('[CURSOR]',cursor);
             if(cursor.char == ','){
+                if(!calling && arg.constant){
+                    throw new Error($this.err("argument [ "+arg.name+" ] must have default value !"));
+                }
                 if(!withParenthese){
                     throw new Error($this.err("syntax error withing parenthesisless calling style function !"));
                 }
@@ -2113,6 +2177,10 @@ $syl.arguments = function(serial,ressources, calling){
                     _arguments[arg.name] = arg;
                 }
                 else{
+                    _arg = getArg(index);
+                    if(_arg && _arg.constant){
+                        throw new Error($this.err("error from trying to set value of [ "+_arg.name+" ] !"));
+                    }
                     _arguments[index] = typeof cursor.word == 'object' ? cursor.word : $this.toVariableStructure(cursor.word);
                 }
                 index++;
@@ -2123,11 +2191,18 @@ $syl.arguments = function(serial,ressources, calling){
                 _res();
             }
             else if(cursor.char == ':'){
+                if(arg.unset){
+                    throw new Error($this.err("unset argument [ "+arg.name+" ] can't have default value !"));
+                }
                 if(!withParenthese){
                     throw new Error($this.err("syntax error withing parenthesisless calling style function !"));
                 }
                 if(calling && !(cursor.word in serial.arguments)){
                     throw new Error($this.err("[ "+cursor.word+" ] is not a defined argument for "+serial.name+" !"));
+                }
+                _arg = getArg(cursor.word);
+                if(_arg && _arg.constant){
+                    throw new Error($this.err("error from trying to set value of [ "+_arg.name+" ] !"));
                 }
                 $this.goTo(1);
                 /**
@@ -2146,6 +2221,7 @@ $syl.arguments = function(serial,ressources, calling){
                     index++;
                     arg.name = cursor.word;
                     _arguments[arg.name] = arg;
+                    _cursor = $this.copy($this.cursor);
                     /**
                      * Si le caractère EOS est un ')' alors, on arrête tout
                      */
@@ -2157,12 +2233,7 @@ $syl.arguments = function(serial,ressources, calling){
                     /**
                      * On réinitialise l'objet arg
                     */
-                    arg = $this.meta({
-                        label: 'argument',
-                        type: 'Any',
-                        implicitType: 'Any',
-                        defaultValue: null
-                    },false);
+                    arg = resetArg();
                     _res();
                 });
                 return;
@@ -2176,6 +2247,10 @@ $syl.arguments = function(serial,ressources, calling){
                     _arguments[arg.name] = arg;
                 }
                 else{
+                    _arg = getArg(index);
+                    if(_arg && _arg.constant){
+                        throw new Error($this.err("error from trying to set value of [ "+_arg.name+" ] !"));
+                    }
                     _arguments[index] = typeof cursor.word == 'object' ? cursor.word : $this.toVariableStructure(cursor.word);
                 }
                 withParenthese--;
@@ -2185,10 +2260,15 @@ $syl.arguments = function(serial,ressources, calling){
             }
             else{
                 if(calling){
+                    _arg = getArg(index);
+                    if(_arg && _arg.constant){
+                        throw new Error($this.err("error from trying to set value of [ "+_arg.name+" ] !"));
+                    }
                     _arguments[index] = typeof cursor.word == 'object' ? cursor.word : $this.toVariableStructure(cursor.word,serial.parent);
                     if(/[\S]+/.test(cursor.char)){
-                        $this.backTo(cursor.char.length);
+                        $this.backTo(cursor.char.length - (cursor.char.length == 1 ? 1 : 0));
                     }
+                    // console.log('[END][Args]',$this.code.substr($this.cursor.index, 10));
                     loop.end();
                 }
                 else{
@@ -2198,7 +2278,7 @@ $syl.arguments = function(serial,ressources, calling){
         }
         function saveArgument(cursor,loop){
             return new Promise(function(_res,_rej){
-                if(calling && cursor.char != ':'){
+                if(calling && cursor.char != ':' && cursor.word && typeof cursor.word != 'object'){
                     // console.log('[Char*****]', cursor.word, '/', cursor.char,'>'+$this.code.substr(_cursor.index,10));
                     loop.stop();
                     $this.cursor = $this.copy(_cursor);
@@ -2207,7 +2287,7 @@ $syl.arguments = function(serial,ressources, calling){
                         ressources: ressources,
                         end: [Synthetic.Lang.constants._EOS.COMA, Synthetic.Lang.constants._EOS.PARENTHESE]
                     }).then(function(result){
-                        // console.log('[Result]',result);
+                        // console.log('[Result]',result,$this.code.substr($this.cursor.index,10));
                         var _char = $this.code[$this.cursor.index-1];
                         /**
                          * Si le caractère précédent est une ")", on doit pas procéder
@@ -2238,23 +2318,48 @@ $syl.arguments = function(serial,ressources, calling){
         }
         _cursor = $this.copy($this.cursor);
         if($this.code[$this.cursor.index] == '('){
-            _cursor.index++;
             withParenthese = 1;
         }
 
         $this.loop(function(cursor,loop){
-            //On cherche les mots dans les arguments
+            /**
+             * On cherche les mots dans les arguments
+             */
+            //  console.log('[Cursor]',cursor);
             if(cursor.word && cursor.word.length){
+                // console.log('[Word]',cursor.word);
                 if($this.types.indexOf(cursor.word) >= 0){
                     if(arg.name || calling){
                         throw new Error($this.err("invalid syntax !"));
                     }
                     arg.type = cursor.word;
+                    loop.stop();
+                    $this.toNextChar().then(function(char){
+                        if(char == '<'){
+                            $this.genericType(cursor.word).then(function(generic){
+                                arg.constraints = generic.constraints;
+                                loop.start();
+                            });
+                        }
+                        else{
+                            $this.backTo(1);
+                            loop.start();
+                        }
+                    });
                 }
                 else if(Synthetic.Lang.reservedKeys.indexOf(cursor.word) >= 0){
-                    throw new Error($this.err("invalid syntax !"));
+                    if(!calling && cursor.word == 'unset' && !arg.constant){
+                        arg.unset = true;
+                    }
+                    else if(!calling && cursor.word == 'const' && !arg.unset){
+                        arg.constant = true;
+                    }
+                    else{
+                        throw new Error($this.err("invalid syntax near [ "+cursor.word+" ] !"));
+                    }
                 }
                 else{
+                    // console.log('[word]',cursor.word, calling, index);
                     arg.name = cursor.word;
                     if(['\n', ' '].indexOf(cursor.char) >= 0){
                         loop.stop();
@@ -2266,12 +2371,39 @@ $syl.arguments = function(serial,ressources, calling){
                         return;
                     }
                     loop.stop();
-                    // console.log('[call for]',cursor.word,'/',cursor.char);
+                    // console.log('[call for]',cursor.word,'/',cursor.char, '\n',$this.code.substr($this.cursor.index, 10));
                     saveArgument(cursor,loop).then(function(){
                         // console.log('[end-->]')
                         loop.start();
                     });
                 }
+            }
+            /**
+             * Sinon si c'est une utilisation de fonction,
+             * on recupère la valeur de la structure si on rencontre un '[' ou un '{'
+             */
+            else if(['[', '{'].indexOf(cursor.char) >= 0 && calling){
+                loop.stop();
+                // console.log('[Check]', $this.code.substr($this.cursor.index, 10));
+                $this.struct({
+                    object: arg,
+                    ressources: ressources
+                }).then(function(result){
+                    $this.toNextChar().then(function(_char){
+                        // console.log('[Result]',result, $this.code[$this.cursor.index]+"<");
+                        saveArgument({char:_char, word: result}, loop).then(function(){
+                            loop.start();
+                        });
+                    });
+                });
+            }
+            /**
+             * Dans d'autre cas, on lève une exception
+             * sauf pour les ouvertures de parenthèse
+             */
+            else if(cursor.char != '('){
+                // console.log('[Cursor]',cursor);
+                // throw new Error($this.err("near by [ "+cursor.char+" ] unexpected !"));
             }
         })
         .then(function(){
@@ -2284,6 +2416,7 @@ $syl.arguments = function(serial,ressources, calling){
             // console.log('[__Word__]',serial.name,'>'+$this.code.substr($this.cursor.index,10));
             if(calling){
                 arg = {};
+                // console.log('[arg]',_arguments);
                 for(var i in _arguments){
                     if(/^[0-9]+$/.test(i)){
                         arg[i] = _arguments[i];
@@ -2291,6 +2424,13 @@ $syl.arguments = function(serial,ressources, calling){
                     else{
                         // console.log('[serial]',serial);
                         arg[serial.arguments[i].index] = _arguments[i];
+                    }
+                }
+                if($this.executing){
+                    for(var i in serial.arguments){
+                        if(serial.arguments[i].unset && !(serial.arguments[i].index in arg) ){
+                            throw new Error($this.err("argument [ "+serial.arguments[i].name+" ] has no value set !"));
+                        }
                     }
                 }
                 _arguments = arg;
@@ -2305,6 +2445,8 @@ $syl.arguments = function(serial,ressources, calling){
  */
 $syl.method = function(serial,ressources){
     var $this = this;
+    this.currentType = null;
+    // console.log('[Serial]',serial);
     return new Promise(function(res,rej){
         var savingArg = false,executing = $this.executing,
             scope;
@@ -2332,9 +2474,9 @@ $syl.method = function(serial,ressources){
                         serial.arguments = arg;
                         if($this.code[$this.cursor.index] == '{'){
                             serial.braced = true;
-                            // console.log('[method] braced');
                             $this.fixScope(false);
                             $this.goTo(1);
+                            // console.log('[method] braced', $this.code.substr($this.cursor.index, 10));
                         }
                         else if(/[\S]+/.test($this.code[$this.cursor.index])){
                             $this.backTo(1);
@@ -2359,7 +2501,7 @@ $syl.method = function(serial,ressources){
                  * sinon on déclenche une erreur
                  */
                 $this.executing = executing;
-                // console.log('[End] of Method');
+                // console.log('[End] of Method',serial);
                 if(serial.braced && $this.code[$this.cursor.index] != '}'){
                     throw new Error($this.err("[ } ] expected !"));
                 }
@@ -2386,7 +2528,7 @@ $syl.litteral = function(litteral,ressources){
         type = this.getType(),
         syntObject = $this.find(litteral),
         exist = syntObject != null,
-        created = false,
+        created = false, dotted = false, nextWord = '',
         serial = exist ? syntObject : this.meta({
             type: type.type,
             parent: this.set(ressources.parent,null),
@@ -2408,6 +2550,14 @@ $syl.litteral = function(litteral,ressources){
             loop.stop();
             if(cursor.char.length){
                 $this.backTo(cursor.char.length - 1);
+            }
+            if(dotted){
+                if($this.getCodeType(nextWord+cursor.char) == Synthetic.Lang.constants.LITTERAL){
+                    nextWord += cursor.char;
+                }
+                else{
+                    console.log('[Cool]', nextWord, resultValue);
+                }
             }
             $this.toNextChar().then(function(_char){
                 cursor.index = $this.cursor.index;
@@ -2466,7 +2616,11 @@ $syl.litteral = function(litteral,ressources){
                     if(!exist && resultValue == null){
                         throw new Error($this.err("[ "+cursor.char+" ] unexpected !"));
                     }
+                    if(dotted){
+                        throw new Error($this.err("syntax error !"));
+                    }
                     resultValue = syntObject;
+                    dotted = false;
                     // console.log('[result]',resultValue);
                     $this.goTo(1);
                     $this.value({
@@ -2486,11 +2640,16 @@ $syl.litteral = function(litteral,ressources){
                         loop.start();
                     });
                 }
+                else if(cursor.char == '.'){
+                    dotted = true;
+                    $this.cursor.index++;
+                    loop.start();
+                }
                 else{
-                    resultValue = resultValue == null ? $this.find(litteral) : resultValue;
+                    // resultValue = resultValue == null ? $this.find(litteral) : resultValue;
                     // console.log('[END LITT]', litteral, exist, created, $this.code.substr($this.cursor.index, 10));
                     if(!exist && $this.executing && !created /*&& resultValue == null*/){
-                        // console.log('[Litteral]',resultValue);
+                        // console.log('[Litteral]',resultValue,$this.cursor,dotted);
                         throw new Error($this.err("[ "+litteral+" ] is undefined !"));
                     }
                     if(exist && resultValue && resultValue.label == "function"){
@@ -2507,11 +2666,19 @@ $syl.litteral = function(litteral,ressources){
                      *  * d'un caractère si la longueur est 1
                      *  * de la totalité de la longueur sinon
                      */
-                    if(cursor.char.length && /[\S]+/.test(cursor.char)){
-                        // console.log('[Char]',cursor.char, _char);
-                        $this.backTo(cursor.char.length - (cursor.char.length == 1 ? 1 : 0));
+                    console.log('[Dotted]',dotted,nextWord);
+                    if(!dotted || (dotted && $this.getCodeType(nextWord) != Synthetic.Lang.constants.LITTERAL)){
+                        // console.log('[Done]',dotted,nextWord, cursor.char);
+                        if(cursor.char.length && /[\S]+/.test(cursor.char)){
+                            // console.log('[Char]',cursor.char, _char);
+                            $this.backTo(cursor.char.length - (cursor.char.length == 1 ? 1 : 0));
+                        }
+                        loop.end();
                     }
-                    loop.end();
+                    else{
+                        $this.cursor.index++;
+                        loop.start();
+                    }
                 }
             });
         }).then(function(){
@@ -2750,10 +2917,14 @@ $syl.if = function(ressources, data){
              */
             if(data.type == 2){
                 $this.executing = executing && previousReason !== null && !previousReason;
+                // console.log('[ELSE]', $this.cursor.scope);
                 braceless = $this.code[$this.cursor.index] != '{';
                 if(!braceless){
                     $this.executing = $this.executing && !previousReason;
                     $this.goTo(1);
+                }
+                else{
+                    $this.cursor.scope++;
                 }
                 $this.parse(ressources,{
                     end: braceless ? [] : [Synthetic.Lang.constants._EOS.BRACE],
@@ -2766,6 +2937,7 @@ $syl.if = function(ressources, data){
                         }
                         $this.goTo(1);
                     }
+                    $this.cursor.scope--;
                     res();
                 });
             }
@@ -2787,8 +2959,9 @@ $syl.if = function(ressources, data){
                     if(parentheseless && $this.code[$this.cursor.index + 1] != '{'){
                         throw new Error($this.err("syntax error. [ { ] expected !"));
                     }
-                    if(parentheseless){
+                    if(!parentheseless){
                         $this.goTo(1);
+                        // $this.cursor.scope++;
                     }
                     braceless = $this.code[$this.cursor.index + (parentheseless ? 1 : 0)] != '{';
                     reason = !$this.executing ? false : $this.toBoolean(value.value);
@@ -2799,18 +2972,23 @@ $syl.if = function(ressources, data){
                     if(!braceless){
                         $this.goTo(1);
                     }
+                    else{
+                        $this.cursor.scope++;
+                    }
                     $this.parse(ressources,{
                         end: braceless ? [] : [Synthetic.Lang.constants._EOS.BRACE],
                         statementCount: braceless ? 1 : -1
                     }).then(function(e){
                         $this.executing = executing;
                         $this.previousReason = reason;
+                        // console.log('[ENDIF]',$this.code.substr($this.cursor.index, 10))
                         if(!braceless){
                             if($this.code[$this.cursor.index] != '}'){
                                 throw new Error($this.err("[ } ] expected !"));
                             }
                             $this.goTo(1);
                         }
+                        $this.cursor.scope--;
                         res(e);
                     });
                 });

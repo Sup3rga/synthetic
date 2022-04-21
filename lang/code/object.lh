@@ -1,3 +1,6 @@
 String nom = "Bien"
 
-Array test = [nom == "Bien" ? 30 : 10 > 3 ? "bien", 50]
+Array test = [nom == "Bien" ? 30 : 10 > 3 ? "bien" : "bad", 50]
+JSON ok = { bien : "Ok" + " cool", "pardon" : "Pardon !",nom}
+
+print ok.bien
