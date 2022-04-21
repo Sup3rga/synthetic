@@ -1325,7 +1325,7 @@ $syl.value = function(data){
             key: null
         },
         constants = Synthetic.Lang.constants._EOS, 
-        _end, _start, _char, _cursor, _type;
+        _end, _start, _char, _cursor, _type, _tempBlocking = false;
     data.subvariables = this.set(data.subvariables, false);
     data.subvalue = this.set(data.subvalue, false);
     data.nearconstraints = 'nearconstraints' in data ? data.nearconstraints : data.subvariables ? null : data.object.constraints;
@@ -1372,6 +1372,16 @@ $syl.value = function(data){
                  * Si c'est un mot-clé ou un type, on déclenche une erreur
                  */
                 else if(_type == Synthetic.Lang.constants.KEYWORD || _type == Synthetic.Lang.constants.TYPE){
+                    /**
+                     * SI on rencontre un type en étant en mode subvalue
+                     * Il se peut qu'on parcours par hasard l'argument d'une fonction
+                     * On doit tout arrêter et empêcher une erreur
+                     */
+                    if(_type == Synthetic.Lang.constants.TYPE && data.subvalue){
+                        _tempBlocking = true;
+                        loop.end();
+                        return;
+                    }
                     throw new Error($this.err("invalid syntax !"));
                 }
                 /**
@@ -1451,14 +1461,6 @@ $syl.value = function(data){
                             });
                             return;
                     }
-                    /**
-                     * Ça peut arriver que le signe soit considéré comme un EOS
-                     * par exemple le ":", alors dans ce cas, on termine la lecture
-                     */
-                    // else if(data.end.indexOf(_end) >= 0){
-                    //     loop.end();
-                    //     return;
-                    // }
                     /**
                      * Sinon on ajoute le signe pour faire le calcul plus tard
                      */
@@ -1577,6 +1579,7 @@ $syl.value = function(data){
                         if(_start == constants.BRACKET && ['String','Array', 'JSON'].indexOf($this.getType(values[values.length - 1])) < 0){
                             throw new Error($this.err("illegal character [ "+cursor.char+"]"));
                         }
+                        _cursor = $this.copy($this.cursor);
                         loop.stop();
                         $this.goTo(1);
                         $this.value({
@@ -1587,15 +1590,32 @@ $syl.value = function(data){
                             subvalue: true,
                             end: [constants.PARENTHESE]
                         }).then(function(result){
-                            if(_start == constants.BRACKET){
-                                var val = $this.toPrimitiveValue(values[values.length - 1])[result.value];
-                                values[values.length - 1].value = val;
+                            // console.log('[Result]',result, $this.code.substr($this.cursor.index-1,10))
+                            /**
+                             * Si le caractère actuel n'est pas un ')'
+                             * Il se pourrait bien qu'on a tenté une fonction
+                             */
+                            if($this.code[$this.cursor.index] != ')'){
+                                $this.cursor = $this.copy(_cursor);
+                                $this.method(data.object,data.ressources).then(function(){
+                                    _cursor = $this.copy($this.cursor);
+                                    values.push(data.object);
+                                    waitingForNextOperand = false;
+                                    loop.start();
+                                });
                             }
                             else{
-                                values.push(result);
+                                if(_start == constants.BRACKET){
+                                    var val = $this.toPrimitiveValue(values[values.length - 1])[result.value];
+                                    values[values.length - 1].value = val;
+                                }
+                                else{
+                                    values.push(result);
+                                }
+                                
+                                waitingForNextOperand = false;
+                                loop.start();
                             }
-                            waitingForNextOperand = false;
-                            loop.start();
                         });
                     }
                     else if(_start >= constants.BRACKET && _start <= constants.BRACE && (!values.length || waitingForNextOperand) ){
@@ -1639,6 +1659,14 @@ $syl.value = function(data){
          * @FIN_DU_TRAITEMENT
          */
         }).then(function(){
+            /**
+             * Si _tempBlocking est activé,
+             * on empêche la vérification des valeurs
+             */
+            if(_tempBlocking){
+                res(null);
+                return;
+            }
             // console.log('[Values]',values);
             var r = $this.executing ? $this.calc(values) : null;
             // console.log('[R]',r,data.subvariables);
@@ -2545,7 +2573,7 @@ $syl.litteral = function(litteral,ressources){
         resultValue = exist ? syntObject :null,_cursor;
         // console.log('[Type]',litteral,redefinition);
 
-        // console.trace('[Serial]',litteral,exist);
+        // console.trace('[Serial]',litteral,exist,serial);
         // previous = exist ? null : this.getCloserStruct([serial.cursor.scope,serial.cursor.index]);
         // console.log('[Ok]');
     return new Promise(function(res){

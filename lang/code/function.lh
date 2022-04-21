@@ -1,6 +1,6 @@
 // bien = int("50")
 //Appelation
-//debug(bien)
+// debug(bien)
 // presenter(const String nom : "bien", String prenom){
 //     debug prenom + " " + nom 
 //     if nom == "bien"{
@@ -15,15 +15,20 @@
 //     }
 // }
 
-String setUp(JSON list){
-    print list["Bien"]
-}
+// String setUp(JSON list){
+//     print list["bien"]
+// }
 // _nom = "Jean"
 // debug (_nom+" ok", _nom)
 // _paul = "Jacques"
 // debug _paul
 // presenter (prenom : "Bonjour")
 // presenter "Bonjour"
-setUp({
-    bien : "Ok"
-})
+// setUp({
+//     bien : "Ok"
+// })
+String test = (String bien){
+    print bien
+}
+
+test "Hello !"
