@@ -1,8 +1,20 @@
 String nom = "Bien"
 
 Array test = [nom == "Bien" ? 30 : 10 > 3 ? "bien" : "bad", 50]
-JSON ok = { bien : "Ok" + " cool", "pardon" : "Pardon !",nom}
+JSON<...> ok = { bien : "Ok" + " cool", "pardon" : "Pardon !",nom}
 
 ok.bien = "cool !"
 
-print ok
+ok = {
+    bien : "Pas mal !",
+    cool: {
+        bien : "Cool !",
+        test: {
+            index: 0
+        }
+    }
+}
+
+ok.test = 50
+
+print ok["cool"] . test

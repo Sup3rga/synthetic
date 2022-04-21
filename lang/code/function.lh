@@ -16,7 +16,7 @@
 // }
 
 String setUp(JSON list){
-    print list
+    print list["Bien"]
 }
 // _nom = "Jean"
 // debug (_nom+" ok", _nom)

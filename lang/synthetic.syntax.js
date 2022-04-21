@@ -2022,26 +2022,25 @@ $syl.native = function(serial,args,ressources){
             tab: function(n){
                 var r = '';
                 for(var i = 0; i < n; i++){
-                    r += '\t';
+                    r += ' ';
                 }
                 return r;
             },
             struct: function(e,n){
                 var n = $this.set(n,0),
-                    array = e.type == 'Array' ? 1 : e.type == 'JSON' ? 2 : 0;
+                    array = e && e.type == 'Array' ? 1 : e && e.type == 'JSON' ? 2 : 0;
                     r = array > 0 ? array == 1 ? '[' : '{' : '';
-                // console.log('[arg]',e);
                 if(array > 0){
                     for(var i in e.value){
                         r += r.length == 1 && array > 1 ? '\n' : '';
-                        r += (r.length > 2 ? "," : "")+(array > 1 ? " "+this.tab(n) : "")+(array == 1 ? "": i+":")+this.struct(e.value[i], n+1);
+                        r += (r.length > 2 ? ", "+(array > 1 ? '\n' : '') : "")+(array > 1 ? " "+this.tab(n) : "")+(array == 1 ? "": i+" : ")+this.struct(e.value[i], n+1);
                     }
                     r += r.length > 1 && array > 1 ? '\n' : '';
                 }
                 else{
-                    r += e.type == 'String' || e.implicitType == 'String' && n > 0 ? '"'+e.value+'"' : e.value;
+                    r += e && (e.type == 'String' || e.implicitType == 'String' && n > 0) ? '"'+e.value+'"' : e ? e.value : ""+e;
                 }
-                r += array > 0 ? array ==  1 ? ']' : '}' : '';
+                r += array > 0 ? array ==  1 ? ']' : this.tab(n)+'}' : '';
                 return r;
             },
             print: function(args){
@@ -2527,7 +2526,9 @@ $syl.litteral = function(litteral,ressources){
     var $this = this,
         type = this.getType(),
         syntObject = $this.find(litteral),
-        exist = syntObject != null,
+        redefinition = this.currentType != null,
+        exist = !redefinition && syntObject != null,
+        settingKey = null, settingKeyObject = null,
         created = false, dotted = false, nextWord = '',
         serial = exist ? syntObject : this.meta({
             type: type.type,
@@ -2539,7 +2540,9 @@ $syl.litteral = function(litteral,ressources){
             parent: this.set(ressources.parent,null)
         }),
         resultValue = exist ? syntObject :null,_cursor;
-        console.log('[Serial]',litteral,exist);
+        // console.log('[Type]',litteral,redefinition);
+
+        // console.trace('[Serial]',litteral,exist);
         // previous = exist ? null : this.getCloserStruct([serial.cursor.scope,serial.cursor.index]);
         // console.log('[Ok]');
     return new Promise(function(res){
@@ -2551,18 +2554,43 @@ $syl.litteral = function(litteral,ressources){
             if(cursor.char.length){
                 $this.backTo(cursor.char.length - 1);
             }
-            if(dotted){
-                if($this.getCodeType(nextWord+cursor.char) == Synthetic.Lang.constants.LITTERAL){
+            if(dotted && $this.executing){
+                // console.log('[Char]',cursor.char, '/', nextWord, resultValue);
+                if(/^[\s]+$/.test(nextWord) || $this.getCodeType(nextWord+cursor.char) == Synthetic.Lang.constants.LITTERAL){
+                    if(/[\s]+/.test(nextWord)){
+                        nextWord = '';
+                    }
                     nextWord += cursor.char;
                 }
                 else{
+                    /**
+                     * Si l'objet en cours est null
+                     * on ne peut pas procéder au syntaxe pointé
+                     */
+                    if(resultValue == null){
+                        $this.cursor = $this.copy(_cursor);
+                        throw new Error($this.err("Cannot read property [ "+nextWord+" ] of null"));
+                    }
                     if(nextWord in resultValue.value){
                         resultValue = resultValue.value[nextWord];
                     }
                     else{
+                        /**
+                         * Si l'objet exist mais pas la clé,
+                         * on le prépare paresseusement pour un enregistrement
+                         */
+                        if(resultValue.type == 'JSON' && exist){
+                            settingKey = nextWord;
+                            settingKeyObject = resultValue;
+                        }
                         resultValue = null;
+                        _cursor = $this.copy($this.cursor);
+                    }
+                    if(cursor.char == '.'){
+                        dotted = false;
                     }
                     nextWord = '';
+                    cursor.word = '';
                     // _cursor = $this.copy($this.cursor);
                     // console.log('[Cool]', $this.code.substr($this.cursor.index, 10));
                 }
@@ -2570,7 +2598,11 @@ $syl.litteral = function(litteral,ressources){
             $this.toNextChar().then(function(_char){
                 cursor.index = $this.cursor.index;
                 cursor.char = _char;
-                if(cursor.word && cursor.word.length){
+                /**
+                 * Si on n'est pas en lecture pointé 'variable.index'
+                 * on fait un rollback
+                 */
+                if(cursor.word && cursor.word.length && !dotted){
                     $this.cursor = _cursor;
                 }
                 //Si on a un opérateur '=', on passe à une affectation
@@ -2579,23 +2611,35 @@ $syl.litteral = function(litteral,ressources){
                     //     throw new Error($this.err("trying to override defined object [ "+litteral+"]"));
                     // }
                     $this.goTo(1);
-                    // console.log('[Serial]',litteral,serial);
+                    // console.log('[Serial]',litteral,settingKey, exist);
+                    if(settingKey){
+                        settingKey = $this.meta({
+                            name: settingKey,
+                            constraints: serial.constraints,
+                            visible: false
+                        });
+                    } 
                     // loop.stop();
                     $this.value({
-                        object: exist ? resultValue : serial, 
+                        object: exist ? resultValue && !settingKey ? resultValue : settingKey : serial, 
                         subvariables: false, 
                         ressources:ressources,
                         ternary: false
                     }).then(function(result){
                         // console.log('[result]',litteral,dotted,exist,'/',result, $this.executing);
                         if(exist){
-                            var tmp = {
-                                name : resultValue.visible,
-                                visible : resultValue.visible
-                            };
-                            $this.extend(resultValue, result,true);
-                            resultValue.name = tmp.name;
-                            resultValue.visible = tmp.visible;
+                            if(settingKey){
+                                settingKeyObject.value[settingKey.name] = $this.extend(settingKey, result);
+                            }
+                            else{
+                                var tmp = {
+                                    name : resultValue.visible,
+                                    visible : resultValue.visible
+                                };
+                                $this.extend(resultValue, result,true);
+                                resultValue.name = tmp.name;
+                                resultValue.visible = tmp.visible;
+                            }
                         }
                         else{
                             $this.extendElse(serial, result);
@@ -2631,8 +2675,12 @@ $syl.litteral = function(litteral,ressources){
                         return;
                     }
                 }
-                //Si on tente l'accès à un variable
-                else if(cursor.char == '['){
+                /**
+                 * Si on tente l'accès à un variable
+                 * Mais si l'objet en cours est une fonction, on évite cette section pour passer
+                 * à la suivante.
+                 */
+                else if(cursor.char == '[' && $this.executing && (!resultValue || resultValue.label != 'function') ){
                     if(!exist && resultValue == null){
                         throw new Error($this.err("[ "+cursor.char+" ] unexpected !"));
                     }
@@ -2656,12 +2704,15 @@ $syl.litteral = function(litteral,ressources){
                         if(result.value in  resultValue.value){
                             resultValue = resultValue.value[result.value];
                         }
+                        else{
+                            resultValue = null;
+                        }
                         _cursor = $this.copy($this.cursor);
                         loop.start();
                     });
                 }
                 else if(cursor.char == '.'){
-                    if(dotted){
+                    if(dotted && $this.executing){
                         /**
                          * Il est hormis d'avoir deux points consécutifs
                          */
@@ -2673,12 +2724,15 @@ $syl.litteral = function(litteral,ressources){
                         }
                         else{
                             resultValue = null;
+                            dotted = false;
                         }
                         // console.log('[Nextword]',nextWord);
                     }
-                    // console.log('[Nextword]',nextWord);
+                    else{
+                        dotted = true;
+                    }
+                    cursor.word = '';
                     nextWord = '';
-                    dotted = true;
                     $this.cursor.index++;
                     loop.start();
                 }
@@ -2693,6 +2747,7 @@ $syl.litteral = function(litteral,ressources){
                         // console.log('[Cursor__]',cursor,resultValue);
                         // console.log('[Next To]',cursor.char,'/',$this.code.substr($this.cursor.index-10,10));
                         $this.caller(resultValue,ressources).then(function(result){
+                            // console.log('[Call][end]', $this.cursor);
                             resultValue = result;
                             loop.end();
                         });
@@ -2719,7 +2774,7 @@ $syl.litteral = function(litteral,ressources){
                 }
             });
         }).then(function(){
-            // console.log('[Result]', resultValue);
+            // console.log('[Result]', litteral, '/', resultValue, $this.code.substr($this.cursor.index, 10));
             if($this.code[$this.cursor.index] == '}'){
                 // console.log('[litt][}]',$this.cursor.scope);
                 $this.fixScope(true);
@@ -2808,7 +2863,7 @@ $syl.parse = function(ressource,data){
                     loop.stop();
                     $this.litteral(cursor.word, ressource).then(function(){
                         statement++;
-                        // console.log('[PARSE]', data);
+                        // console.log('[PARSE]', data,cursor.word);
                         if(data.statementCount >= statement){
                             loop.end();
                         }
