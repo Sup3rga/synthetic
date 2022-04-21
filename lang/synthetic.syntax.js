@@ -2254,7 +2254,7 @@ $syl.arguments = function(serial,ressources, calling){
                 }
                 withParenthese--;
                 $this.goTo(1);
-                // console.log('[arg][end]', cursor.word,serial.name, '>'+$this.code.substr($this.cursor.index, 5));
+                // console.log('[arg][end]', cursor.word,serial.name, '>'+$this.code.substr($this.cursor.index-1, 5));
                 loop.end();
             }
             else{
@@ -2281,6 +2281,7 @@ $syl.arguments = function(serial,ressources, calling){
                     // console.log('[Char*****]', cursor.word, '/', cursor.char,'>'+$this.code.substr(_cursor.index,10));
                     loop.stop();
                     $this.cursor = $this.copy(_cursor);
+                    // console.log('[String]',$this.code.substr($this.cursor.index, 10));
                     $this.value({
                         object: arg,
                         ressources: ressources,
@@ -2295,6 +2296,7 @@ $syl.arguments = function(serial,ressources, calling){
                         // console.log('[ARG][Litt]','>'+$this.code.substr($this.cursor.index,10), '/', _char, result)
                         if([')'].indexOf(_char) >= 0){
                             _cursor = $this.copy($this.cursor);
+                            $this.cursor.index--;
                             finishSavingArgument({char: _char, word: result}, loop,_res);
                         }
                         else{
@@ -2318,6 +2320,7 @@ $syl.arguments = function(serial,ressources, calling){
         _cursor = $this.copy($this.cursor);
         if($this.code[$this.cursor.index] == '('){
             withParenthese = 1;
+            _cursor.index++;
         }
 
         $this.loop(function(cursor,loop){
@@ -2358,7 +2361,7 @@ $syl.arguments = function(serial,ressources, calling){
                     }
                 }
                 else{
-                    // console.log('[word]',cursor.word, calling, index);
+                    // console.log('[word]',cursor.word, calling, index,cursor.char);
                     arg.name = cursor.word;
                     if(['\n', ' '].indexOf(cursor.char) >= 0){
                         loop.stop();
@@ -2555,12 +2558,23 @@ $syl.litteral = function(litteral,ressources){
                 $this.backTo(cursor.char.length - 1);
             }
             if(dotted && $this.executing){
-                // console.log('[Char]',cursor.char, '/', nextWord, resultValue);
-                if(/^[\s]+$/.test(nextWord) || $this.getCodeType(nextWord+cursor.char) == Synthetic.Lang.constants.LITTERAL){
-                    if(/[\s]+/.test(nextWord)){
+                /**
+                 * S'il y a de l'espace entre le point et le précédent objet,
+                 * on fait en sorte que cela n'impacte pas la notation pointée
+                 * Et on évite à ce que les littéraux soient interpretés en mot-clé ou type
+                 */
+                if(/^[\s]+$/.test(nextWord) || !nextWord.length || [Synthetic.Lang.constants.LITTERAL, Synthetic.Lang.constants.TYPE, Synthetic.Lang.constants.KEYWORD].indexOf($this.getCodeType(nextWord+cursor.char)) >= 0){
+                    if(!nextWord.length && /[\s]+/.test(nextWord)){
                         nextWord = '';
                     }
-                    nextWord += cursor.char;
+                    if(/[\S]+/.test(cursor.char)){
+                        nextWord += cursor.char;
+                    }
+                    if(!nextWord.length){
+                        $this.cursor.index++;
+                        loop.start();
+                        return;
+                    }
                 }
                 else{
                     /**
@@ -2687,10 +2701,10 @@ $syl.litteral = function(litteral,ressources){
                     if(dotted){
                         throw new Error($this.err("syntax error !"));
                     }
-                    resultValue = syntObject;
+                    // resultValue = syntObject;
                     dotted = false;
-                    // console.log('[result]',resultValue);
                     $this.goTo(1);
+                    loop.stop();
                     $this.value({
                         object: $this.meta({
                             type: 'Any',
@@ -2707,9 +2721,11 @@ $syl.litteral = function(litteral,ressources){
                         else{
                             resultValue = null;
                         }
+                        // console.log('[INDEXED]',result.value, $this.code.substr($this.cursor.index, 10));
                         _cursor = $this.copy($this.cursor);
                         loop.start();
                     });
+                    return;
                 }
                 else if(cursor.char == '.'){
                     if(dotted && $this.executing){
@@ -2757,9 +2773,9 @@ $syl.litteral = function(litteral,ressources){
                      * Si l'EOS n'est pas un caractère blanc, on fait marche arrière
                      *  * d'un caractère si la longueur est 1
                      *  * de la totalité de la longueur sinon
+                     * 
                      */
-                    // console.log('[Dotted]',dotted,nextWord);
-                    if(!dotted || (dotted && $this.getCodeType(nextWord) != Synthetic.Lang.constants.LITTERAL)){
+                    if(!dotted || (dotted && [Synthetic.Lang.constants.LITTERAL, Synthetic.Lang.constants.TYPE, Synthetic.Lang.constants.KEYWORD].indexOf($this.getCodeType(nextWord+cursor.char)) < 0)){
                         // console.log('[Done]',dotted,nextWord, cursor.char);
                         if(cursor.char.length && /[\S]+/.test(cursor.char)){
                             // console.log('[Char]',cursor.char, _char);

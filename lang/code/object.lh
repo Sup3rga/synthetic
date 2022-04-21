@@ -3,12 +3,11 @@ String nom = "Bien"
 Array test = [nom == "Bien" ? 30 : 10 > 3 ? "bien" : "bad", 50]
 JSON<...> ok = { bien : "Ok" + " cool", "pardon" : "Pardon !",nom}
 
-ok.bien = "cool !"
-
+// ok.bien = "cool !"
 ok = {
     bien : "Pas mal !",
     cool: {
-        bien : "Cool !",
+        bien : int("20"/*bien*/),
         test: {
             index: 0
         }
@@ -17,4 +16,4 @@ ok = {
 
 ok.test = 50
 
-print ok["cool"] . test
+print ok["cool"]//["test"]["index"]
