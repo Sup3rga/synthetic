@@ -27,8 +27,17 @@
 // setUp({
 //     bien : "Ok"
 // })
-String test = (String bien){
-    print bien
+
+prenom = "Julien"
+
+String test(Boolean nom : (test){print test + " !!!"}){ 
+    String bien = "Ok"
+    // nom bien
+    return nom prenom
 }
 
-test "Hello !"
+test((tk){
+    print "Hello " + tk +" !"
+})
+// print test "le bonjour"
+// print test "le bonsoir"

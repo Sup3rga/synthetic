@@ -18,6 +18,7 @@ Synthetic.Lang = {
         'class', 'interface', 'trait', 'protected', 'this','super', 'abstract', 'static',
         'toString','implements'
     ],
+    valuableReservedKeys: ['return'],
     lazyKeys : ['import', 'from', 'include'],
     baseType : ['Any', 'String', 'Number', 'JSON', 'Array', 'Boolean', 'Regex', 'Function', 'External'],
     breakableKeys : ['return', 'break'],
@@ -123,6 +124,8 @@ Synthetic.Class = function(){
     this.modules = {};
     this.exportables = {};
     this.executing = true;
+    this.tryMethodInstead = false;
+    this.tryMethodInsteadConfirmed = false;
     this.previousReason = null;
     this.blocks = ['0,0'];
     this.scopes = {};
@@ -633,8 +636,8 @@ $syl.genericType = function(type){
     var $this = this,
         _type = type;
     return new Promise(function(res,rej){
-        if(Synthetic.Lang.baseType.indexOf(type) >= 0 && ['Array', 'JSON'].indexOf(type) < 0){
-            throw new Error(this.err("primitive type [ "+ type + "] can't be generic !"));
+        if(Synthetic.Lang.baseType.indexOf(_type) >= 0 && ['Array', 'JSON'].indexOf(_type) < 0){
+            throw new Error($this.err("primitive type [ "+ _type + "] can't be generic !"));
         }
         var _dictMod = _type != 'Array',
             type = {
@@ -1325,7 +1328,8 @@ $syl.value = function(data){
             key: null
         },
         constants = Synthetic.Lang.constants._EOS, 
-        _end, _start, _char, _cursor, _type, _tempBlocking = false;
+        _end, _start, _char, _cursor, _type,
+        _tryMethod = this.tryMethodInstead;
     data.subvariables = this.set(data.subvariables, false);
     data.subvalue = this.set(data.subvalue, false);
     data.nearconstraints = 'nearconstraints' in data ? data.nearconstraints : data.subvariables ? null : data.object.constraints;
@@ -1352,19 +1356,28 @@ $syl.value = function(data){
                  * Si le mot est un litteral, on cherche sa valeur
                  */
                 _type = $this.getCodeType(cursor.word);
-                // console.log('[Val][Word]',cursor.word,cursor.char+'<');
+                // console.log('[Val][Word]',cursor.word,'/'+$this.code.substr($this.cursor.index,10)+'<', $this.executing);
                 if(_type == Synthetic.Lang.constants.LITTERAL){
                     loop.stop();
                     if(/[\S]+/.test(cursor.char)){
                         $this.backTo(cursor.char.length - 1);
                     }
                     _cursor = $this.cursor;
+                    /**
+                     * Si on est en mode subvalue
+                     * On va vérifier si on est en une appelle de fonction
+                     */
+                    // console.log('[Here]',cursor.word);
                     $this.litteral(cursor.word, data.ressources).then(function(result){
+                        // if(data.subvalue && !result)
+                        // console.log('[Result]', data.subvalue,result == null, $this.tryMethodInsteadConfirmed);
                         values.push(result);
                         waitingForNextOperand = false;
                         // console.log('[Litt____]',cursor.char,'//',$this.code.substr($this.cursor.index, 10));
                         // $this.backTo(1);
                         loop.start();
+                    }).catch(function(e){
+                        // console.log('[Err]');
                     });
                     return;
                 }
@@ -1378,7 +1391,7 @@ $syl.value = function(data){
                      * On doit tout arrêter et empêcher une erreur
                      */
                     if(_type == Synthetic.Lang.constants.TYPE && data.subvalue){
-                        _tempBlocking = true;
+                        $this.tryMethodInsteadConfirmed = true;
                         loop.end();
                         return;
                     }
@@ -1394,7 +1407,8 @@ $syl.value = function(data){
                      * On doit avoir un nombre pour le faire sinon on lève une exception
                      * sauf dans le cas où le pré-opération pour la reversion
                     */
-                    if(preOperations >= 0){
+                    if(preOperations >= 0 && $this.executing){
+                        // console.log('[PreOp]',preOperations,Synthetic.Lang.simpleOperations, values, $this.executing);
                         if(type != 'Number' && preOperations != Synthetic.Lang.simpleOperations.REVERSE){
                             throw new Error($this.err("Number value expected"));
                         }
@@ -1470,6 +1484,7 @@ $syl.value = function(data){
                     }
                 }
                 else if(['-', '+', '++', '--', '!'].indexOf(cursor.char) >= 0){
+                    // console.log('[Values]',values);
                     if(cursor.char == '+'){
                         preOperations = Synthetic.Lang.simpleOperations.POSITIVE;
                     }
@@ -1582,6 +1597,13 @@ $syl.value = function(data){
                         _cursor = $this.copy($this.cursor);
                         loop.stop();
                         $this.goTo(1);
+                        /**
+                         * Il se pourrait qu'on ait la difficulté de différencier
+                         * Une recherche de sous-valeur d'une construction de fonction
+                         */
+                        if(_start == constants.PARENTHESE){
+                            $this.tryMethodInstead = true;
+                        }
                         $this.value({
                             object : data.object,
                             subvariables: data.subvariables,
@@ -1595,16 +1617,24 @@ $syl.value = function(data){
                              * Si le caractère actuel n'est pas un ')'
                              * Il se pourrait bien qu'on a tenté une fonction
                              */
-                            if($this.code[$this.cursor.index] != ')'){
-                                $this.cursor = $this.copy(_cursor);
-                                $this.method(data.object,data.ressources).then(function(){
-                                    _cursor = $this.copy($this.cursor);
-                                    values.push(data.object);
-                                    waitingForNextOperand = false;
-                                    loop.start();
-                                });
-                            }
-                            else{
+                            $this.toNextChar().then(function(_char){
+
+                                if((!result && $this.tryMethodInsteadConfirmed) || _char == '{'){
+                                    // console.log('[Go to] method');
+                                    $this.cursor = $this.copy(_cursor);
+                                    $this.tryMethodInsteadConfirmed = false;
+                                    $this.tryMethodInstead = _tryMethod;
+                                    $this.method(data.object, data.ressources).then(function(method){
+                                        // console.log('[Method]',method);//_cursor = $this.copy($this.cursor);
+                                        values.push(data.object);
+                                        waitingForNextOperand = false;
+                                        loop.start();
+                                    });
+                                    return;
+                                }
+                                $this.tryMethodInsteadConfirmed = false;
+                                $this.tryMethodInstead = _tryMethod;
+    
                                 if(_start == constants.BRACKET){
                                     var val = $this.toPrimitiveValue(values[values.length - 1])[result.value];
                                     values[values.length - 1].value = val;
@@ -1615,7 +1645,7 @@ $syl.value = function(data){
                                 
                                 waitingForNextOperand = false;
                                 loop.start();
-                            }
+                            });
                         });
                     }
                     else if(_start >= constants.BRACKET && _start <= constants.BRACE && (!values.length || waitingForNextOperand) ){
@@ -1663,7 +1693,7 @@ $syl.value = function(data){
              * Si _tempBlocking est activé,
              * on empêche la vérification des valeurs
              */
-            if(_tempBlocking){
+            if($this.tryMethodInsteadConfirmed){
                 res(null);
                 return;
             }
@@ -1912,25 +1942,50 @@ $syl.createBlock = function(ref){
 /**
  * La méthode getCloserStruct permet de retrouver la structure (class, mixin, enum) la plus proche en parenté
  */
-$syl.getCloserStruct = function(cursor){
-    var previous = this.previousCloserRef(cursor),
-        object, r = null;
-    if(previous == null){
-        return  '0,0';
+$syl.getCloserStruct = function(cursor, labels){
+    var previous = this.previousCloserRef(cursor,true),
+        labels = Array.isArray(labels) ? labels : Synthetic.Lang.typeCreatorKeys,
+        object, r = null, list = {}, indexes = [];
+    /**
+     * On ne doit pas rechercher dans le scope parent actuel
+     * mais de préférence dans le scope parent du scope parent actuel
+     * Si le resultat est [0,0] on sait alors qu'on est dans la racine
+     * et qu'aucun structure n'est identifiable comme le bloc parent de l'élément actuel
+     */
+    if(previous == '0,0'){
+        return 0;
     }
-    while(r==null){
+    else{
+        previous = this.previousCloserRef(previous.split(','), true);
+    }
+    while(!r){
         if(previous in this.modules){
             object = this.modules[previous];
-            if(Synthetic.Lang.typeCreatorKeys.indexOf(object.label) >= 0){
-                r = object;
+            for(var i in object){
+                if(labels.indexOf(object[i].label) >= 0){
+                    list[object[i].cursor.index] = object[i];
+                    indexes.push(object[i].cursor.index * 1);
+                    r = true;
+                    break;
+                }
+            }
+            if(r){
                 break;
             }
         }
+        if(previous == '0,0'){
+            break;
+        }
+        previous = this.previousCloserRef(previous.split(','));
+    }
+    r = null;
+    indexes.sort();
+    for(var i in indexes){
+        if(cursor[1] > indexes[i]){
+            r = list[indexes[i]];
+        }
         else{
-            if(previous == '0,0'){
-                break;
-            }
-            previous = this.previousCloserRef(previous.split(','));
+            break;
         }
     }
     return r;
@@ -2106,6 +2161,9 @@ $syl.native = function(serial,args,ressources){
  */
 $syl.caller = function(callable,ressources){
     var $this = this, cursor;
+    if(callable.ref in this.modules){
+        delete this.modules[callable.ref];
+    }
     return new Promise(function(res){
         $this.toNextChar().then(function(_char){
             // console.log('[code]',$this.code.substr($this.cursor.index, 5));
@@ -2116,6 +2174,15 @@ $syl.caller = function(callable,ressources){
                     res(null);
                 }
                 else{
+                    /**
+                     * Conséquence d'un argument ayant le même nom qu'une fonction définie
+                     * alors qu'on le crée dans les paramètres d'un callback
+                     */
+                    if(!args && $this.tryMethodInstead){
+                        $this.tryMethodInsteadConfirmed = true;
+                        res(null);
+                        return;
+                    }
                     if(callable.native){
                         $this.native(callable,args,ressources).then(function(value){
                             res(value);
@@ -2123,23 +2190,30 @@ $syl.caller = function(callable,ressources){
                     }
                     else{
                         $this.createScopeObject(callable,args);
+                        // console.log('[$modules]',$this.modules);
                         /**
                          * On copie les données actuelles du curseur pour les restaurer après !
                          */
                         cursor = $this.copy($this.cursor);
                         $this.cursor = $this.copy(callable.scopeCursor);
                         // $this.cursor.index++;
-                        $this.parse(ressources,{
+                        // console.log('[CALL][PARSING]')
+                        $this.parse({
+                            parent : callable.addr
+                        },{
                             end: callable.braced ? [Synthetic.Lang.constants._EOS.BRACE] : [],
                             statementCount: callable.braced ? -1 : 1
                         }).then(function(response){
+                            $this.executing = true;
                             if(callable.braced){
                                 $this.toNextChar().then(function(__char){
-                                    $this.cursor = cursor;
+                                    $this.cursor = $this.copy(cursor);
                                     res(response);
                                 });
                             }
                             else{
+                                // $this.cursor.scope--;
+                                $this.cursor = $this.copy(cursor);
                                 res(response);
                             }
                         })
@@ -2235,6 +2309,7 @@ $syl.arguments = function(serial,ressources, calling){
                 /**
                  * Si la boucle est déjà bloquée, on ne le bloc pas à nouveau
                  */
+                // console.log('[Set]',$this.code.substr($this.cursor.index, 10));
                 $this.value({
                     object: arg,
                     subvariables: false, 
@@ -2242,6 +2317,7 @@ $syl.arguments = function(serial,ressources, calling){
                     ternary: false,
                     end: [Synthetic.Lang.constants._EOS.COMA, Synthetic.Lang.constants._EOS.PARENTHESE]
                 }).then(function(result){
+                    // console.log('[Result]',result);
                     arg.implicitType = result.implicitType;
                     arg.value = result.value;
                     arg.index = index;
@@ -2282,6 +2358,7 @@ $syl.arguments = function(serial,ressources, calling){
                 }
                 withParenthese--;
                 $this.goTo(1);
+                // console.log('[ARGS][END][1]',serial.name, $this.code.substr($this.cursor.index, 10));
                 // console.log('[arg][end]', cursor.word,serial.name, '>'+$this.code.substr($this.cursor.index-1, 5));
                 loop.end();
             }
@@ -2427,22 +2504,30 @@ $syl.arguments = function(serial,ressources, calling){
                     });
                 });
             }
-            /**
-             * Dans d'autre cas, on lève une exception
-             * sauf pour les ouvertures de parenthèse
-             */
-            else if(cursor.char != '('){
-                // console.log('[Cursor]',cursor);
+            else if(cursor.char == ')'){
+                withParenthese--;
+                $this.goTo(1);
+                loop.end();
                 // throw new Error($this.err("near by [ "+cursor.char+" ] unexpected !"));
             }
         })
         .then(function(){
             // $this.goTo(1);
             if(withParenthese != 0){
+                /**
+                 * Il se peut qu'un argument ait le même nom qu'une fonction définie,
+                 * il faut empêcher le déclenchemenent de l'erreur
+                 */
+                if($this.tryMethodInstead){
+                    res(null);
+                }
+                else{
                 // $this.backTo(1);
                 // console.log('[NOOOOO !]',withParenthese,calling,'>'+$this.code.substr($this.cursor.index-1,10));
-                throw new Error($this.err(withParenthese < 0 ? "syntax error ! [ ) ] unexpected" : "[ ) ] expected !"));
+                    throw new Error($this.err(withParenthese < 0 ? "syntax error ! [ ) ] unexpected" : "[ ) ] expected !"));
+                }
             }
+            // console.log('[Arg][finish]',$this.code.substr($this.cursor.index, 10));
             // console.log('[__Word__]',serial.name,'>'+$this.code.substr($this.cursor.index,10));
             if(calling){
                 arg = {};
@@ -2477,6 +2562,7 @@ $syl.method = function(serial,ressources){
     var $this = this;
     this.currentType = null;
     // console.log('[Serial]',serial);
+    // console.trace('[Method]',serial.name);
     return new Promise(function(res,rej){
         var savingArg = false,executing = $this.executing,
             scope;
@@ -2511,9 +2597,13 @@ $syl.method = function(serial,ressources){
                         else if(/[\S]+/.test($this.code[$this.cursor.index])){
                             $this.backTo(1);
                         }
+                        if(!serial.braced){
+                            $this.fixScope(true);
+                        }
                         serial.scopeCursor = $this.copy($this.cursor);
                         serial.begin = $this.cursor.index;
                         $this.createBlock(serial.ref);
+                        // console.log('[Arg]', arg, serial.name, $this.code.substr($this.cursor.index-1, 10))//, serial.ref, $this.executing, $this.blocks);
                         loop.start();
                     });
                 });
@@ -2522,23 +2612,25 @@ $syl.method = function(serial,ressources){
             $this.executing = false;
             loop.stop();
             $this.parse(ressources, {
-                end: serial.braced ? [Synthetic.Lang.constants._EOS.BRACE] : [],
+                end: [Synthetic.Lang.constants._EOS.BRACE],
                 statementCount: serial.braced ? -1 : 1
             }).then(function(){
-                // console.log('[Ok]', bien);
+                // console.log('[PARSE][END]',serial.name, $this.code.substr($this.cursor.index, 10));
                 /**
                  * Si la function a des accolades, il faut que le EOS soit un "}"
                  * sinon on déclenche une erreur
                  */
                 $this.executing = executing;
-                // console.log('[End] of Method',serial);
+                // console.log('[End] of Method',serial.name,'/',$this.code.substr($this.cursor.index, 10)+'<')//,serial, $this.code.substr($this.cursor.index, 10));
                 if(serial.braced && $this.code[$this.cursor.index] != '}'){
                     throw new Error($this.err("[ } ] expected !"));
                 }
                 if(serial.braced){
-                    // $this.cursor.scope++;
-                    // console.log('[Ok] !', $this.cursor.scope);
                     $this.goTo(1);
+                }
+                else{
+                    $this.cursor.scope--;
+                    $this.backTo(1);
                 }
                 loop.end();
             });
@@ -2571,7 +2663,7 @@ $syl.litteral = function(litteral,ressources){
             parent: this.set(ressources.parent,null)
         }),
         resultValue = exist ? syntObject :null,_cursor;
-        // console.log('[Type]',litteral,redefinition);
+        // console.log('[Type]',litteral,redefinition,exist);
 
         // console.trace('[Serial]',litteral,exist,serial);
         // previous = exist ? null : this.getCloserStruct([serial.cursor.scope,serial.cursor.index]);
@@ -2684,12 +2776,13 @@ $syl.litteral = function(litteral,ressources){
                             }
                         }
                         else{
-                            $this.extendElse(serial, result);
-                            serial.implicitType = result.implicitType;
-                            // console.log('[cursor]',$this.cursor.index);
-                            _cursor = $this.copy($this.cursor);
-                            created = true;
-                            resultValue = serial;
+                            if($this.executing){
+                                $this.extendElse(serial, result);
+                                serial.implicitType = result.implicitType;
+                                _cursor = $this.copy($this.cursor);
+                                created = true;
+                                resultValue = serial;
+                            }
                         }
                         loop.end();
                     });
@@ -2704,6 +2797,7 @@ $syl.litteral = function(litteral,ressources){
                     if(!exist){
                         $this.method(serial,ressources).then(function(method){
                             resultValue = method;
+                            // console.log('[Method]',$this.executing,method.name);
                             _cursor = $this.copy($this.cursor);
                             created = true;
                             loop.start();
@@ -2711,6 +2805,7 @@ $syl.litteral = function(litteral,ressources){
                     }else{
                         $this.caller(resultValue,ressources).then(function(result){
                             resultValue = result;
+                            // console.log('[Caller][finished]')
                             _cursor = $this.copy($this.cursor);
                             loop.end();
                         });
@@ -2784,8 +2879,16 @@ $syl.litteral = function(litteral,ressources){
                     // resultValue = resultValue == null ? $this.find(litteral) : resultValue;
                     // console.log('[END LITT]', litteral, exist, created, $this.cursor.index, $this.code.substr($this.cursor.index, 10));
                     if(!exist && $this.executing && !created /*&& resultValue == null*/){
-                        // console.log('[Litteral]',resultValue,$this.cursor,dotted);
-                        throw new Error($this.err("[ "+litteral+" ] is undefined !"));
+                        if($this.tryMethodInstead){
+                            resultValue = null;
+                            $this.tryMethodInsteadConfirmed = true;
+                            loop.end();
+                            return;
+                        }
+                        else{
+                            // console.log('[Litteral]',resultValue,$this.cursor,dotted);
+                            throw new Error($this.err("[ "+litteral+" ] is undefined !"));
+                        }
                     }
                     if(exist && resultValue && resultValue.label == "function"){
                         // console.log('[Cursor__]',cursor,resultValue);
@@ -2843,8 +2946,9 @@ $syl.parse = function(ressource,data){
          * comme par exemple le référencement du bloc de l'instruction parente
         */
         ressource = this.set(ressource,{}),
+        object = null,
         _end, statement = 0;
-        // console.log('[Parse]',data);
+        // console.log('[Parse]', ressource);
         data.end = Array.isArray(data.end) ? data.end : [];
         data.statementCount = this.set(data.statementCount,-1);
     return new Promise(function(resolve, reject){
@@ -2860,7 +2964,10 @@ $syl.parse = function(ressource,data){
                  */
                 if(Synthetic.Lang.reservedKeys.indexOf(cursor.word) >= 0){
                     loop.stop();
-                    $this[cursor.word](ressource).then(function(){
+                    $this[cursor.word](ressource).then(function(result){
+                        if(Synthetic.Lang.valuableReservedKeys.indexOf(cursor.word) >= 0){
+                            object = result;
+                        }
                         statement++;
                         // console.log('[PARSE][keyword]',$this.cursor.index,data.statementCount);
                         if(data.statementCount >= statement){
@@ -2869,7 +2976,8 @@ $syl.parse = function(ressource,data){
                         else{
                             loop.start();
                         }
-                    })
+                    });
+                    return;
                 }
                 /**
                  * S'il est un type défini on prend on compte le type
@@ -2905,7 +3013,8 @@ $syl.parse = function(ressource,data){
                  */
                 else if($this.getCodeType(cursor.word) == Synthetic.Lang.constants.LITTERAL){
                     loop.stop();
-                    $this.litteral(cursor.word, ressource).then(function(){
+                    $this.litteral(cursor.word, ressource).then(function(result){
+                        object = result;
                         statement++;
                         // console.log('[PARSE]', data,cursor.word);
                         if(data.statementCount >= statement){
@@ -2915,6 +3024,7 @@ $syl.parse = function(ressource,data){
                             loop.start();
                         }
                     });
+                    return;
                 }
             }
             /**
@@ -2928,18 +3038,21 @@ $syl.parse = function(ressource,data){
                 loop.end();
                 return;
             }
+            else if(cursor.char != '<' && !cursor.word && /[\S]+/.test(cursor.char)){
+                // console.log('[Char][parse]',cursor.char);
+            }
             /**
              * on suggère qu'il y a un type prise en compte pour voir s'il y a généricité
              */
             if($this.currentType != null && cursor.char == '<'){
                 loop.stop();
-                $this.genericType($this.currentType.type).then(function(e){
+                $this.genericType($this.getType().type).then(function(e){
                     $this.currentType = e;
                     loop.start();
                 });
             }
         }).then(function(){
-            resolve();
+            resolve(object);
         });
     });
 }
@@ -3158,5 +3271,41 @@ $syl.else = function(ressources){
         }).then(function(e){
             res(e)
         })
+    });
+}
+
+/**
+ * La méthode return permet d'exécuter un retour de fonction
+ */
+$syl.return = function(ressources){
+    var $this = this;
+    return new Promise(function(res){
+        var parent = Synthetic.Lang.objects[ressources.parent];
+        
+        //$this.getCloserStruct([$this.cursor.scope, $this.cursor.index], ['function']);
+        /**
+         * Si l'instruction return est en déhors d'une fonction, on arrête tout
+         */
+        // if('parent' in ressources){
+        //     console.log('[Ressources]',Synthetic.Lang.objects[ressources.parent]);   
+        // }
+        if($this.executing && parent.label != 'function'){
+            throw new Error($this.err("Illegal statement ! return statement outside of function !"));
+        }
+        $this.value({
+            object: $this.executing ? $this.copy(parent) : $this.meta({},false),
+            subvariables: false, 
+            ressources : ressources,
+            ternary: false
+        }).then(function(result){
+            // $this.extend(parent, cp_parent);
+            if($this.executing){
+                $this.executing = false;
+                res(result);
+            }
+            else{
+                res(null);
+            }
+        });
     });
 }
