@@ -16,4 +16,4 @@ ok = {
 
 ok.test = 50
 
-print ok["cool"]//["test"]["index"]
+print ok["cool"]["test"]//["index"]

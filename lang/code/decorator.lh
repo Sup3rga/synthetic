@@ -1,0 +1,5 @@
+decorator main
+
+button{
+    width: width > 400 ? "40%" : "30%"
+}

@@ -23,21 +23,43 @@
 // _paul = "Jacques"
 // debug _paul
 // presenter (prenom : "Bonjour")
-// presenter "Bonjour"
+// // presenter "Bonjour"
 // setUp({
 //     bien : "Ok"
 // })
 
-prenom = "Julien"
+// prenom = "Julien"
 
-String test(Boolean nom : (test){print test + " !!!"}){ 
+String test(String nom : (tester){return tester + " !!!"}){ 
     String bien = "Ok"
     // nom bien
-    return nom prenom
+    // print tk
+    return nom "bien"
 }
-
-test((tk){
-    print "Hello " + tk +" !"
+//!Remarque : Incapacité de rechercher ses variables
+print test((tk){
+    return "Hello everyone ! " + tk
 })
+// fn(String nom){
+//     function(ok){
+//         print ok + " " + nom
+//     }
+//     print "Bonsoir " + nom
+//     return function;
+// }
+
+// alias = fn "Bien"
+
+// alias "Synthetic"
 // print test "le bonjour"
 // print test "le bonsoir"
+
+// fn(nom){
+//     print "Bonjour " + nom + " !"
+// }
+
+// host(callback,test){
+//     callback test
+// }
+
+// host(fn, "Jacques")

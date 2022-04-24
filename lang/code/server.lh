@@ -1,0 +1,8 @@
+import sserv
+
+sserv
+.on("get", "/", (HttpRequest req, Client client){
+    client.receive "Hello " + req.name
+})
+
+sserv.listen 500

@@ -179,13 +179,24 @@ $syl.set = function(e, v, s){
  * La méthode garbage pemet de nettoyer le stockage inutile des variables
  */
 $syl.garbage = function(){
+    var addr = [];
     for(var i in this.modules){
-        delete this.modules[i][null];
-    }
-    for(var i in Synthetic.Lang.objects){
-        if(Synthetic.Lang.objects[i].name == null){
-            delete Synthetic.Lang.objects[i];
+        if(null in this.modules[i]){
+            addr.push(this.modules[i][null].addr);
+            delete this.modules[i][null];
         }
+        for(var j in this.modules[i]){
+            /**
+             * Les variables qui ont été comme non-existant doivent être supprimées !
+             */
+            if(this.modules[i][j].label == 'variable' && !('value' in this.modules[i][j]) ){
+                addr.push(this.modules[i][j].addr);
+                delete this.modules[i][j];
+            }
+        }
+    }
+    for(var i in addr){
+        delete Synthetic.Lang.objects[addr[i]];
     }
     //@DELETE
 
@@ -1625,9 +1636,10 @@ $syl.value = function(data){
                                     $this.tryMethodInsteadConfirmed = false;
                                     $this.tryMethodInstead = _tryMethod;
                                     $this.method(data.object, data.ressources).then(function(method){
-                                        // console.log('[Method]',method);//_cursor = $this.copy($this.cursor);
+                                        // console.log('[Method]',method, $this.modules);//_cursor = $this.copy($this.cursor);
                                         values.push(data.object);
                                         waitingForNextOperand = false;
+                                        $this.garbage();
                                         loop.start();
                                     });
                                     return;
@@ -1699,14 +1711,13 @@ $syl.value = function(data){
             }
             // console.log('[Values]',values);
             var r = $this.executing ? $this.calc(values) : null;
-            // console.log('[R]',r,data.subvariables);
-            if($this.executing && !data.subvariables && !data.subvalue && data.object.type != 'Any' && r.type != data.object.type && r.implicitType != data.object.type){
+            if($this.executing && !data.subvariables && !data.subvalue && data.object.type != 'Any' && (!r || (r.type != data.object.type && r.implicitType != data.object.type)) ){
                 $this.cursor = data.object.cursor;
-                throw new Error($this.err(data.object.type+" value expected, "+r.implicitType+" given !"));
+                throw new Error($this.err(data.object.type+" value expected, "+(r ? r.implicitType : "Any" )+" given !"));
             }
-            else if($this.executing && data.subvariables && data.object.constraints && !$this.isValidateConstraint(r, data.object.constraints.value)){
-                if(['Array', 'JSON'].indexOf(r.type) < 0 || !data.object.constraints.recursive){
-                    throw new Error($this.err($this.toStringTypes(data.object.constraints.value)+" value expected, "+r.type+" given !"));
+            else if($this.executing && data.subvariables && data.object.constraints && (!r || !$this.isValidateConstraint(r, data.object.constraints.value)) ){
+                if(!r || ['Array', 'JSON'].indexOf(r.type) < 0 || !data.object.constraints.recursive){
+                    throw new Error($this.err($this.toStringTypes(data.object.constraints.value)+" value expected, "+(!r ? "Any" : r.type)+" given !"));
                 }
             }
             $this.garbage();
@@ -1881,7 +1892,7 @@ $syl.save = function(objet,parent){
         }
     }
     var ref = this.previousCloserRef([parent.scope, parent.index], true);
-    // console.log('[REF]',ref, objet.name,objet.label);
+    // console.log('[REF]',ref, objet.name, objet.label, '/', parent.scope, parent.index);
     if(!(ref in this.modules)){
         this.modules[ref] = {};
     }
@@ -1934,9 +1945,12 @@ $syl.createBlock = function(ref){
     if(!this.executing){
         return;
     }
+    // console.log('[block]',ref);
     var cursor = ref.split(',');
     var ref = cursor[0] + ',' + cursor[1];
-    this.blocks.push(ref);
+    if(this.blocks.indexOf(ref) < 0){
+        this.blocks.push(ref);
+    }
     return this;
 }
 /**
@@ -2008,6 +2022,15 @@ $syl.createScopeObject = function(serial,list){
         if(index in list){
             args[index] = this.copy(list[index]);
             args[index].name = _arg ? _arg.name : null;
+            /**
+             * Si la valeur de l'argument est une fonction,
+             * on doit modifier son 'scopeCursor.scope' à la valeur du scope de l'argument
+             * correspondant ou celui de la fonction appelée, augmentée de 1
+             * @reason : Pour corriger l'erreur de recherche des arguments internes
+             */
+            if('scopeCursor' in args[index]){
+                args[index].scopeCursor.scope = _arg ? _arg.cursor.scope + 1 : serial.scopeCursor.scope + 1; 
+            }
         }
         else if(_arg){
             args[index] = _arg;
@@ -2017,6 +2040,7 @@ $syl.createScopeObject = function(serial,list){
         }
         index++;
     }
+    // console.log('[Final]',args,serial.name, serial.ref);
     for(var i in args){
         this.save(args[i], serial);
     }
@@ -2038,6 +2062,10 @@ $syl.find = function(name){
         var $this = this;
         var scope = $this.previousCloserRef([$this.cursor.scope, $this.cursor.index],true),
             r = null;
+        // console.log('[Name]',name,'::', [$this.cursor.scope, $this.cursor.index], scope, this.blocks);
+        // if(name == 'tk'){
+        //     console.log('[Mod]',this.modules);
+        // }
         while(scope != null && r == null){
             if(name == 'root'){
                 if(scope == "0,0"){
@@ -2045,7 +2073,7 @@ $syl.find = function(name){
                 }
                 scope = '0,0';
             }
-            else if(name[0] == 'upper'){
+            else if(name == 'upper'){
                 if(scope == "0,0"){
                     break;
                 }
@@ -2164,11 +2192,13 @@ $syl.caller = function(callable,ressources){
     if(callable.ref in this.modules){
         delete this.modules[callable.ref];
     }
+    //! TODO : modifier l'incohérence des arguments des callbacks
+    // console.log('[Call]',callable.name, callable.arguments);
     return new Promise(function(res){
         $this.toNextChar().then(function(_char){
             // console.log('[code]',$this.code.substr($this.cursor.index, 5));
             $this.arguments(callable,ressources,true).then(function(args){
-                // console.log('[Args]',args,$this.executing);
+                // console.log('[Args]',callable.name,"::",args,$this.executing);
                 // console.log('[Arg]',args,'\n-->',$this.code.substr($this.cursor.index-10, 20), $this.executing);
                 if(!$this.executing){
                     res(null);
@@ -2178,10 +2208,21 @@ $syl.caller = function(callable,ressources){
                      * Conséquence d'un argument ayant le même nom qu'une fonction définie
                      * alors qu'on le crée dans les paramètres d'un callback
                      */
-                    if(!args && $this.tryMethodInstead){
-                        $this.tryMethodInsteadConfirmed = true;
-                        res(null);
-                        return;
+                    if(!args){
+                        /**
+                         * Si le resultat des arguments est nul on va vérifier:
+                         *  * Si 'trynMethodeInstead' est activé, dans ce cas on prendra en compte
+                         *    le traitement d'un callback (création)
+                         *  * Sinon on saura qu'on doit retourner la référence de la fonction
+                         */
+                        if($this.tryMethodInstead){
+                            $this.tryMethodInsteadConfirmed = true;
+                            res(null);
+                            return;
+                        }else{
+                            res(callable);
+                            return;
+                        }
                     }
                     if(callable.native){
                         $this.native(callable,args,ressources).then(function(value){
@@ -2189,6 +2230,7 @@ $syl.caller = function(callable,ressources){
                         });
                     }
                     else{
+                        // console.log('[Args-->]',args,callable.arguments);
                         $this.createScopeObject(callable,args);
                         // console.log('[$modules]',$this.modules);
                         /**
@@ -2232,7 +2274,7 @@ $syl.arguments = function(serial,ressources, calling){
     return new Promise(function(res){
         var _arguments = {},
             arg, index = 0, _cursor, _arg,
-            withParenthese = 0;
+            withParenthese = 0, callCertitude = 0;
         function getArg(n,notNull){
             notNull = $this.set(notNull,false)
             for(var i in serial.arguments){
@@ -2264,25 +2306,28 @@ $syl.arguments = function(serial,ressources, calling){
         function finishSavingArgument(cursor,loop,_res){
             // console.log('[CURSOR]',cursor);
             if(cursor.char == ','){
-                if(!calling && arg.constant){
-                    throw new Error($this.err("argument [ "+arg.name+" ] must have default value !"));
+                if(cursor.word){
+                    if(!calling && arg.constant){
+                        throw new Error($this.err("argument [ "+arg.name+" ] must have default value !"));
+                    }
+                    if(!calling){
+                        arg.index = index;
+                    }
+                    if(!calling){
+                        arg.name = cursor.word;
+                        _arguments[arg.name] = arg;
+                    }
+                    else{
+                        _arg = getArg(index);
+                        if(_arg && _arg.constant){
+                            throw new Error($this.err("error from trying to set value of [ "+_arg.name+" ] !"));
+                        }
+                        _arguments[index] = typeof cursor.word == 'object' ? cursor.word : $this.toVariableStructure(cursor.word);
+                    }
                 }
                 if(!withParenthese){
-                    throw new Error($this.err("syntax error withing parenthesisless calling style function !"));
-                }
-                if(!calling){
-                    arg.index = index;
-                }
-                if(!calling){
-                    arg.name = cursor.word;
-                    _arguments[arg.name] = arg;
-                }
-                else{
-                    _arg = getArg(index);
-                    if(_arg && _arg.constant){
-                        throw new Error($this.err("error from trying to set value of [ "+_arg.name+" ] !"));
-                    }
-                    _arguments[index] = typeof cursor.word == 'object' ? cursor.word : $this.toVariableStructure(cursor.word);
+                    loop.end();
+                    return;
                 }
                 index++;
                 /**
@@ -2357,7 +2402,9 @@ $syl.arguments = function(serial,ressources, calling){
                     _arguments[index] = typeof cursor.word == 'object' ? cursor.word : $this.toVariableStructure(cursor.word);
                 }
                 withParenthese--;
-                $this.goTo(1);
+                if(callCertitude){
+                    $this.goTo(1);
+                }
                 // console.log('[ARGS][END][1]',serial.name, $this.code.substr($this.cursor.index, 10));
                 // console.log('[arg][end]', cursor.word,serial.name, '>'+$this.code.substr($this.cursor.index-1, 5));
                 loop.end();
@@ -2383,16 +2430,18 @@ $syl.arguments = function(serial,ressources, calling){
         function saveArgument(cursor,loop){
             return new Promise(function(_res,_rej){
                 if(calling && cursor.char != ':' && cursor.word && typeof cursor.word != 'object'){
-                    // console.log('[Char*****]', cursor.word, '/', cursor.char,'>'+$this.code.substr(_cursor.index,10));
                     loop.stop();
                     $this.cursor = $this.copy(_cursor);
+                    // console.log('[Char*****]',serial.name+"::", cursor.word, '/', cursor.char,'>'+$this.code.substr(_cursor.index,10));
                     // console.log('[String]',$this.code.substr($this.cursor.index, 10));
                     $this.value({
                         object: arg,
                         ressources: ressources,
                         end: [Synthetic.Lang.constants._EOS.COMA, Synthetic.Lang.constants._EOS.PARENTHESE]
                     }).then(function(result){
-                        // console.log('[Result]',result,$this.code.substr($this.cursor.index,10));
+                        // if(result.label == 'function'){
+                        //     console.log('[Result]',serial.name+"::",cursor.word, result,'/',$this.code.substr($this.cursor.index-1,10));
+                        // }
                         var _char = $this.code[$this.cursor.index-1];
                         /**
                          * Si le caractère précédent est une ")", on doit pas procéder
@@ -2426,6 +2475,7 @@ $syl.arguments = function(serial,ressources, calling){
         if($this.code[$this.cursor.index] == '('){
             withParenthese = 1;
             _cursor.index++;
+            callCertitude = 1;
         }
 
         $this.loop(function(cursor,loop){
@@ -2483,6 +2533,7 @@ $syl.arguments = function(serial,ressources, calling){
                         // console.log('[end-->]')
                         loop.start();
                     });
+                    return;
                 }
             }
             /**
@@ -2506,13 +2557,39 @@ $syl.arguments = function(serial,ressources, calling){
             }
             else if(cursor.char == ')'){
                 withParenthese--;
-                $this.goTo(1);
+                if(callCertitude){
+                    $this.goTo(1);
+                }
                 loop.end();
+            }
+            else if(cursor.char == ';'){
+                /**
+                 * Si on rencontre un ; on doit s'assurer que l'enregistrement des
+                 * arguments est terminé
+                 */
+                if(withParenthese){
+                    throw new Error($this.error("illegal end of statement [ ; ] !"));
+                }
+                loop.end();
+            }
+            /**
+             * Si on rencontre un ',' et qu'aucun argument n'a été pris en charge
+             * Tout en ayant terminé, on doit terminer la lecture
+             */
+            else if(cursor.char == ',' && !$this.len(_arguments)){
+                if(withParenthese){
+                    throw new Error($this.error("[ , ] unexpected !"));
+                }
+                loop.end();
+                // console.log('[Okk*********]',serial.name+"::",cursor.word,$this.code.substr($this.cursor.index, 10));
+            }
+            else{
                 // throw new Error($this.err("near by [ "+cursor.char+" ] unexpected !"));
             }
         })
         .then(function(){
             // $this.goTo(1);
+            // console.log('[Arg][result]',serial.name+"::", $this.len(_arguments),_arguments);
             if(withParenthese != 0){
                 /**
                  * Il se peut qu'un argument ait le même nom qu'une fonction définie,
@@ -2521,8 +2598,7 @@ $syl.arguments = function(serial,ressources, calling){
                 if($this.tryMethodInstead){
                     res(null);
                 }
-                else{
-                // $this.backTo(1);
+                else if(callCertitude){
                 // console.log('[NOOOOO !]',withParenthese,calling,'>'+$this.code.substr($this.cursor.index-1,10));
                     throw new Error($this.err(withParenthese < 0 ? "syntax error ! [ ) ] unexpected" : "[ ) ] expected !"));
                 }
@@ -2550,6 +2626,15 @@ $syl.arguments = function(serial,ressources, calling){
                 }
                 _arguments = arg;
             }
+            /**
+             * Si on n'a aucune certitude qu'on a fait appelle à la fonction
+             * ce qui obligerait les '()'
+             * on retourne null
+             */
+            if(!$this.len(_arguments) && !callCertitude){
+                res(null);
+                return;
+            }
             res(_arguments);
         });
     });
@@ -2562,7 +2647,7 @@ $syl.method = function(serial,ressources){
     var $this = this;
     this.currentType = null;
     // console.log('[Serial]',serial);
-    // console.trace('[Method]',serial.name);
+    // console.log('[Method]',serial.name);
     return new Promise(function(res,rej){
         var savingArg = false,executing = $this.executing,
             scope;
@@ -2587,11 +2672,14 @@ $syl.method = function(serial,ressources){
                          * lecture des arguments
                          */
                         $this.cursor.scope--;
+                        // console.log('[Scope]',$this.cursor.scope, serial.name, $this.code.substr($this.cursor.index, 15));
                         serial.arguments = arg;
                         if($this.code[$this.cursor.index] == '{'){
                             serial.braced = true;
+                            // $this.cursor.scope--;
                             $this.fixScope(false);
                             $this.goTo(1);
+                            // console.log('[Back To]', $this.code[$this.cursor.index], $this.cursor.scope);
                             // console.log('[method] braced', $this.code.substr($this.cursor.index, 10));
                         }
                         else if(/[\S]+/.test($this.code[$this.cursor.index])){
@@ -2603,7 +2691,7 @@ $syl.method = function(serial,ressources){
                         serial.scopeCursor = $this.copy($this.cursor);
                         serial.begin = $this.cursor.index;
                         $this.createBlock(serial.ref);
-                        // console.log('[Arg]', arg, serial.name, $this.code.substr($this.cursor.index-1, 10))//, serial.ref, $this.executing, $this.blocks);
+                        // console.log('[Arg]', arg, serial.name, $this.code.substr($this.cursor.index-1, 15))//, serial.ref, $this.executing, $this.blocks);
                         loop.start();
                     });
                 });
@@ -2621,7 +2709,7 @@ $syl.method = function(serial,ressources){
                  * sinon on déclenche une erreur
                  */
                 $this.executing = executing;
-                // console.log('[End] of Method',serial.name,'/',$this.code.substr($this.cursor.index, 10)+'<')//,serial, $this.code.substr($this.cursor.index, 10));
+                // console.log('[End] of Method',serial,'/',$this.code.substr($this.cursor.index, 10)+'<')//,serial, $this.code.substr($this.cursor.index, 10));
                 if(serial.braced && $this.code[$this.cursor.index] != '}'){
                     throw new Error($this.err("[ } ] expected !"));
                 }
@@ -2663,8 +2751,8 @@ $syl.litteral = function(litteral,ressources){
             parent: this.set(ressources.parent,null)
         }),
         resultValue = exist ? syntObject :null,_cursor;
-        // console.log('[Type]',litteral,redefinition,exist);
-
+        
+        // console.log('[Type]',litteral,redefinition,exist, [$this.cursor.scope, $this.cursor.index]);
         // console.trace('[Serial]',litteral,exist,serial);
         // previous = exist ? null : this.getCloserStruct([serial.cursor.scope,serial.cursor.index]);
         // console.log('[Ok]');
@@ -2760,7 +2848,7 @@ $syl.litteral = function(litteral,ressources){
                         ressources:ressources,
                         ternary: false
                     }).then(function(result){
-                        // console.log('[result]',litteral,dotted,exist,'/',result, $this.executing);
+                        // console.log('[result]',litteral,exist,'/',result, $this.executing);
                         if(exist){
                             if(settingKey){
                                 settingKeyObject.value[settingKey.name] = $this.extend(settingKey, result);
@@ -2778,7 +2866,13 @@ $syl.litteral = function(litteral,ressources){
                         else{
                             if($this.executing){
                                 $this.extendElse(serial, result);
+                                if(!result){
+                                    throw new Error($this.err("previous syntax error detected !"));
+                                }
                                 serial.implicitType = result.implicitType;
+                                if(["function"].indexOf(result.label) >= 0){
+                                    serial.label = result.label;
+                                }
                                 _cursor = $this.copy($this.cursor);
                                 created = true;
                                 resultValue = serial;
@@ -2881,6 +2975,7 @@ $syl.litteral = function(litteral,ressources){
                     if(!exist && $this.executing && !created /*&& resultValue == null*/){
                         if($this.tryMethodInstead){
                             resultValue = null;
+                            $this.garbage();
                             $this.tryMethodInsteadConfirmed = true;
                             loop.end();
                             return;
@@ -2894,7 +2989,7 @@ $syl.litteral = function(litteral,ressources){
                         // console.log('[Cursor__]',cursor,resultValue);
                         // console.log('[Next To]',cursor.char,'/',$this.code.substr($this.cursor.index-10,10));
                         $this.caller(resultValue,ressources).then(function(result){
-                            // console.log('[Call][end]', $this.cursor);
+                            // console.log('[Call][end]',litteral,'/',(result ? result.name : null), $this.code.substr($this.cursor.index, 10));
                             resultValue = result;
                             loop.end();
                         });
@@ -2921,7 +3016,7 @@ $syl.litteral = function(litteral,ressources){
                 }
             });
         }).then(function(){
-            // console.log('[Result]', litteral, '/', resultValue, $this.code.substr($this.cursor.index, 10));
+            // console.log('[Litteral][Result]', litteral, '/', $this.code.substr($this.cursor.index, 10));
             if($this.code[$this.cursor.index] == '}'){
                 // console.log('[litt][}]',$this.cursor.scope);
                 $this.fixScope(true);
