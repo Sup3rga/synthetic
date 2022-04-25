@@ -5,11 +5,13 @@
 
 // ok.bien = "cool !"
 
-JSON<...>, ok = {
+JSON ok = {
     bien : "Pas mal !",
     fn : (nom){
         print "cool "+nom+" !"
-        return { nom : "bien" }
+        return { 
+            nom
+        }
     },
     cool: "bien"
 }

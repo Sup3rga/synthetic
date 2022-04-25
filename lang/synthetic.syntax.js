@@ -1144,6 +1144,7 @@ $syl.struct = function(data){
         }), key = null, index = 0,
         _cursor = $this.copy($this.cursor),
         object;
+        // console.log('[Call][Struct]')
         // $this.goTo(1);
         $this.loop(function(cursor,loop){
             // console.log('[Struct]', cursor);
@@ -1156,11 +1157,15 @@ $syl.struct = function(data){
                     $this.cursor = $this.copy(_cursor);
                 }
                 _cursor = $this.copy($this.cursor);
+                /**
+                 * Il ne faut enregistrer la variable provenue de la clé pour éviter les conflits
+                 * avec l'existence des variables pré-existantes !
+                 */
                 object = $this.meta({
                     type: !data.object.constraints ? 'Any' : data.object.constraints.value[0].type,
                     name: _type == 'JSON' ? key : null,
                     constraints: !data.object.constraints ? null : data.object.constraints.value[0].constraints,
-                });
+                }, false);
                 $this.value({
                     object: object,
                     subvariables: true,
@@ -1186,6 +1191,7 @@ $syl.struct = function(data){
                     else{
                         structure.value[key] = object;
                     }
+                    $this.save(object);
                     key = null;
                     // console.log('[Result]',$this.code.substr($this.cursor.index-1,2),'/',result);
                     switch($this.code[$this.cursor.index-1]){
@@ -1247,6 +1253,7 @@ $syl.struct = function(data){
                         else if(['}', ','].indexOf(_char) >= 0){
                             if($this.getCodeType(cursor.word) == Synthetic.Lang.constants.LITTERAL){
                                 $this.litteral(cursor.word, data.ressources).then(function(result){
+                                    // console.log('[Litt]',result, '>'+$this.code.substr($this.cursor.index, 10));
                                     if($this.executing){
                                         if(data.object.constraints && !$this.isValidateConstraint("String", data.object.constraints.key)){
                                             if(['Array', 'JSON'].indexOf(result.type) < 0 || !data.object.constraints.recursive){
@@ -1265,10 +1272,8 @@ $syl.struct = function(data){
                                         }
                                         structure.value[result.name] = result;
                                     }
-                                    else{
-                                        $this.cursor = _cursor;
-                                    }
                                     if($this.code[$this.cursor.index] == '}'){
+                                        $this.cursor.index++;
                                         loop.end();
                                         return;
                                     }
@@ -1288,12 +1293,14 @@ $syl.struct = function(data){
                 }
             }
         }).then(function(){
-            // console.log('[Struct]',structure, $this.code.substr($this.cursor.index, 10));
+            // console.log('[Struct][end]',structure.name, $this.code.substr($this.cursor.index, 10));
             res(structure);
-        })
+        });
     });
 }
-
+/**
+ * La méthode ternary permet de trouver la valeur d'une opération ternaire
+ */
 $syl.ternary = function(data){
     /**
      * @structure : {object, reason, references, end}
@@ -1418,6 +1425,7 @@ $syl.value = function(data){
                      * On va vérifier si on est en une appelle de fonction
                      */
                     // console.log('[Here]',cursor.word);
+                    // if(cursor.word == 'nom') console.log('[from][Value]',$this.modules);
                     $this.litteral(cursor.word, data.ressources).then(function(result){
                         // if(data.subvalue && !result)
                         // console.log('[Result]', data.subvalue,result == null, $this.tryMethodInsteadConfirmed);
@@ -1579,6 +1587,7 @@ $syl.value = function(data){
                     loop.end();
                 }
                 else if(Synthetic.Lang.blockEOS.indexOf(cursor.char) < 0){
+                    // console.log('[Console]',data.end, _end);
                     throw new Error($this.err("illegal end of statement [ "+cursor.char+" ]"));
                 }
             }
@@ -2250,7 +2259,7 @@ $syl.native = function(serial,args,ressources){
     var repere = this.cursorOrigin(serial.cursor.index);
     return new Promise(function(res){
         /**
-         * 'out', 'print','split', 'typeof', 'replace', 'lower', 'maj', 'len',
+         * 'out','split', 'typeof', 'replace', 'lower', 'maj', 'len',
         'tap', 'push','pop','shift', 'delete', 'sort','reverse', 'revSort',
         'filter', 'round','max','min', 'floor','ceil','abs', 'pow', 'join',
         'str', 'int', 'float', 'bool', 'timer', 'jsExec', 'platform', 'raise',
@@ -2903,7 +2912,10 @@ $syl.litteral = function(litteral,ressources){
         resultValue = exist ? syntObject :null,
         _cursor;
         if(!exist){
-            // console.log('[Modules]',$this.modules);
+            // console.log('[Modules]',litteral,$this.modules);
+        }
+        else{
+            // console.log('[Litt]',litteral, $this.modules);
         }
         // console.log('[Type]',litteral,redefinition,exist, [$this.cursor.scope, $this.cursor.index]);
         // console.trace('[Serial]',litteral,exist,serial);
@@ -3595,6 +3607,9 @@ $syl.return = function(ressources){
         //     console.log('[Ressources]',Synthetic.Lang.objects[ressources.parent]);   
         // }
         // console.log('[Parent]',parent, ressources);
+        if($this.executing){
+            // console.log('[Return]',$this.modules);
+        }
         if($this.executing && parent.label != 'function'){
             throw new Error($this.err("Illegal statement ! return statement outside of function !"));
         }
