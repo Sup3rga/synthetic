@@ -1,5 +1,5 @@
 // bien = int("50")
-//Appelation
+// //Appelation
 // debug(bien)
 // presenter(const String nom : "bien", String prenom){
 //     debug prenom + " " + nom 
@@ -30,32 +30,37 @@
 
 // prenom = "Julien"
 
-String test(String nom : (tester){return tester + " !!!"}){ 
-    String bien = "Ok"
-    // nom bien
-    // print tk
-    return nom "bien"
-}
-//!Remarque : Incapacité de rechercher ses variables
-print test((tk){
-    return "Hello everyone ! " + tk
-})
+// String test(String nom : (tester){
+//     return tester + " !!!"
+// }
+// ){ 
+//     String bien = "Ok"
+//     // nom bien
+//     // print tk
+//     return nom "bien"
+// }
+
+// print test((tk){
+//     return "Hello everyone ! " + tk
+// })
+
 // fn(String nom){
 //     function(ok){
 //         print ok + " " + nom
 //     }
 //     print "Bonsoir " + nom
-//     return function;
+//     return function
 // }
 
-// alias = fn "Bien"
+// alias = fn("Bien")
 
 // alias "Synthetic"
 // print test "le bonjour"
 // print test "le bonsoir"
 
-// fn(nom){
+// String fn(String nom){
 //     print "Bonjour " + nom + " !"
+//     return null
 // }
 
 // host(callback,test){
@@ -63,3 +68,5 @@ print test((tk){
 // }
 
 // host(fn, "Jacques")
+test = null
+print test
