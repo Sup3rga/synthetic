@@ -972,7 +972,7 @@ $syl.getRelationType = function(type1,type2,operator){
  * La méthode toBoolean convertit toute valeur primitive en booléen
  */
 $syl.toBoolean = function(value){
-    return [false,"false",0,'0'].indexOf(value) < 0;
+    return [false,"false",0,'0','null',null].indexOf(value) < 0;
 }
 
 /**
@@ -2219,7 +2219,7 @@ $syl.containsKey = function(key, object){
     if(!object){
         throw new Error(this.err("cant read [ "+key+" ] property of null"));
     }
-    return key in object.value;
+    return typeof object.value[key] != 'undefined';
 }
 /**
  * La méthode cursorOrigin permet de trouver la ligne approximative dans laquelle se
@@ -2259,8 +2259,8 @@ $syl.native = function(serial,args,ressources){
     var repere = this.cursorOrigin(serial.cursor.index);
     return new Promise(function(res){
         /**
-         * 'out','split', 'typeof', 'replace', 'lower', 'maj', 'len',
-        'tap', 'push','pop','shift', 'delete', 'sort','reverse', 'revSort',
+         * 'out',
+        'tap', 'delete', 'sort','reverse', 'revSort',
         'filter', 'round','max','min', 'floor','ceil','abs', 'pow', 'join',
         'str', 'int', 'float', 'bool', 'timer', 'jsExec', 'platform', 'raise',
         'setState'
@@ -2280,7 +2280,7 @@ $syl.native = function(serial,args,ressources){
                 if(array > 0){
                     for(var i in e.value){
                         r += r.length == 1 && array > 1 ? '\n' : '';
-                        r += (r.length > 2 ? ", "+(array > 1 ? '\n' : '') : "")+(array > 1 ? " "+this.tab(n) : "")+(array == 1 ? "": i+" : ")+this.struct(e.value[i], n+1);
+                        r += (r.length >= 2 ? ", "+(array > 1 ? '\n' : '') : "")+(array > 1 ? " "+this.tab(n) : "")+(array == 1 ? "": i+" : ")+this.struct(e.value[i], n+1);
                     }
                     r += r.length > 1 && array > 1 ? '\n' : '';
                 }
@@ -2293,6 +2293,30 @@ $syl.native = function(serial,args,ressources){
                 }
                 r += array > 0 ? array ==  1 ? ']' : this.tab(n)+'}' : '';
                 return r;
+            },
+            err: function(n_arg){
+                var n = $this.len(args);
+                if(n < n_arg){
+                    $this.cursor = $this.copy(serial.cursor);
+                    throw new Error($this.err(n_arg+" arguments expected for [ "+serial.name+" ], "+n+" given !"));
+                }
+            },
+            expect: function(arg,n,types){
+                if(!$this.isValidateConstraint(arg, types)){
+                    $this.cursor = $this.copy(arg.cursor);
+                    throw new Error($this.toStringTypes(types)+" expected for argument "+n+", "+arg.implicitType+" given !");
+                }
+            },
+            rearrange: function(){
+                var indexes = [], tmp;
+                for(var i in args[0].value){
+                    indexes.push(i);
+                }
+                for(var i in indexes){
+                    tmp = args[0].value[indexes[i]];
+                    delete args[0].value[indexes[i]];
+                    args[0].value[i] = tmp;
+                }
             },
             print: function(args){
                 var r = '';
@@ -2320,9 +2344,129 @@ $syl.native = function(serial,args,ressources){
                 r = parseInt(r.value);
                 r = isNaN(r) ? 0 : r;
                 return $this.toVariableStructure(r, ressources.parent);
+            },
+            len: function(args){
+                var r = 0;
+                if('0' in args && 'value' in args[0]){
+                    if(['Array', 'JSON'].indexOf(args[0].type)){
+                        r = $this.len(args[0].value);
+                    }
+                    else{
+                        r = args[0].value.length;
+                    }
+                }
+                return $this.toVariableStructure(r);
+            },
+            split: function(args){
+                var r = [], separator = '', result = $this.meta({
+                    type: 'Array',
+                    value: {}
+                },false);
+                this.expect(args[0],0,[{type:'String'}]);
+                if('0' in args && (args[0].type == 'String' || args[0].implicitType == 'String')){
+                    if('1' in args && (args[1].type == 'String' || args[1].implicitType == 'String')){
+                        separator = args[1].value;
+                    }
+                    r = args[0].value.split(separator);
+                }
+                for(var i in r){
+                    result.value[i] = $this.toVariableStructure(r[i])
+                }
+                return result;
+            },
+            typeof: function(args){
+                var r = "Any";
+                if('0' in args){
+                    r = args[0].implicitType;
+                }
+                return $this.toVariableStructure(r);
+            },
+            replace: function(args){
+                this.err(3);
+                var r = args[0].value;
+                this.expect(args[0],0,[{type:'String'}]);
+                this.expect(args[1],1,[{type:'String'},{type:'Number'}]);
+                this.expect(args[2],2,[{type:'String'},{type:'Number'}]);
+                r = args[0].value.replace(args[1].value, args[2].value);
+                return $this.toVariableStructure(r);
+            },
+            lower: function(args){
+                this.expect(args[0], 0, [{type:'String'},{type:'Number'}]);
+                return $this.toVariableStructure(args[0].value.toLowerCase());
+            },
+            maj: function(args){
+                this.expect(args[0], 0, [{type:'String'},{type:'Number'}]);
+                return $this.toVariableStructure(args[0].value.toUpperCase());
+            },
+            push: function(args){
+                this.err(2);
+                this.expect(args[0], 0, [{type: 'Array'}]);
+                var index = $this.len(args[0].value);
+                for(var i in args){
+                    if(i * 1 > 0){
+                        this.expect(args[i], i, args[0].constraints ? args[0].constraints.value : [{type: 'Any'}]);
+                        if(['Array','JSON'].indexOf(args[i].type) >= 0 && (!args[0].constraints || !args[0].constraints.recursive)){
+                            $this.cursor = $this.copy(arg[i].cursor);
+                            throw new Error($this.err("trying to push structure into non-recursive structure !"));
+                        }
+                        args[0].value[index] = args[i];
+                        index++;
+                    }
+                }
+                return args[0];
+            },
+            shift: function(args){
+                this.expect(args[0], 0, [{type: 'Array'}]);
+                for(var i in args[0].value){
+                    delete args[0].value[i];
+                    break;
+                }
+                this.rearrange();
+                return args[0];
+            },
+            pop: function(args){
+                this.expect(args[0], 0, [{type: 'Array'}]);
+                var index = $this.len(args[0].value),
+                    indexed = false;
+                for(var i in args){
+                    if(i * 1 > 0 && i){
+                        indexed = true;
+                        if(args[0].value){
+                            delete args[0].value[i];
+                        }
+                    }
+                }
+                if(!indexed){
+                    for(var i in args[0].value){
+                        index = i;
+                    }
+                    delete args[0].value[index];
+                }
+                this.rearrange();
+                return args[0];
             }
         };
-        res(natives[serial.name](args));
+        if(serial.name == 'tap'){
+            var message = "";
+            if('0' in args){
+                natives.expect(args[0],0,[{type: 'String'}]);
+                message = args[0].value;
+            }
+            if(node_env){
+                var readline = require('readline');
+                rl = readline.createInterface({
+                    input: process.stdin,
+                    output: process.stdout
+                });
+                rl.question(message, function(e){
+                    rl.close();
+                    res($this.toVariableStructure(e));
+                });
+            }
+        }
+        else{
+            res(natives[serial.name](args));
+        }
     });
 }
 /**

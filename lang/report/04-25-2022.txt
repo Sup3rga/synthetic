@@ -1,4 +1,3 @@
 20:02:25
-* Fixer le retour d'objet (JSON) pour les fonctions
 * Implémenter les autres fonctions natives
 * Corriger les erreurs de lignes en rapport avec les scopes

@@ -68,5 +68,8 @@
 // }
 
 // host(fn, "Jacques")
-test = null
-print test
+// test = null
+// print test
+cool = tap "Cool : "
+print ("[Len]", cool)
+print "coook !"
