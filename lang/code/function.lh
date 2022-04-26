@@ -70,6 +70,16 @@
 // host(fn, "Jacques")
 // test = null
 // print test
-cool = tap "Cool : "
-print ("[Len]", cool)
-print "coook !"
+
+String nom = maj tap "Votre nom : "
+String prenom = tap "Votre prenom : "
+Number age = int tap "Votre age : "
+
+print "Bonsoir " + prenom + " "+ nom+" ! agé de "+age+" ans";
+
+if age >= 18 {
+    print "Vous êtes donc majeur !"
+}
+else{
+    print "Vous êtes donc mineur !"
+}

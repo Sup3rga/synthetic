@@ -1,3 +1,3 @@
-20:02:25
-* Implémenter les autres fonctions natives
-* Corriger les erreurs de lignes en rapport avec les scopes
+* Implémenter les autres fonctions natives (timer,jsExec,platform)
+* Implémenter la fonctionnalité d'exécution parallèle pour les fonctions
+* Corriger le bugs de scopes via le positionnement du curseur

@@ -29,9 +29,9 @@ Synthetic.Lang = {
     typeCreatorKeys : ['mixin', 'class', 'interface', 'enum'],
     typeBehinAcceptionKeys : ['with'],
     nativeFunctions : [
-        'out', 'print','split', 'typeof', 'replace', 'lower', 'maj', 'len',
-        'tap', 'push','pop','shift', 'delete', 'sort','reverse', 'revSort',
-        'filter', 'round','max','min', 'floor','ceil','abs', 'pow', 'join',
+        'print','split', 'typeof', 'replace', 'lower', 'maj', 'len',
+        'tap', 'push','pop','shift', 'sort','reverse',
+        'round','max','min', 'floor','ceil','abs', 'pow', 'join',
         'str', 'int', 'float', 'bool', 'timer', 'jsExec', 'platform', 'raise',
         'setState', 'debug'
     ],
@@ -42,8 +42,8 @@ Synthetic.Lang = {
         "maj" : "String", "lower": "String", "replace" : "String", "typeof" : "String",
         "out": "Any", "print" : "Any", "timer": "Any", "jsExec": "Any", "raise": "Any",
         "pop": "Any", "shift": "Any", "split": "Array", "sort": "Array", "reverse": "Array",
-        "revSort": "Array", "filter": "Array", "join": "String", "platform": "String", "tap" : "String",
-        "push": "Any", "delete" : "Any"
+        "filter": "Array", "join": "String", "platform": "String", "tap" : "String",
+        "push": "Any"
     },
     definedTypes: [],
     blockEOS : ['}'],
@@ -1055,7 +1055,7 @@ $syl.calc = function(list){
             return $this.toPrimitiveValue(a) <= $this.toPrimitiveValue(b);
         },
         ">=": function(a,b){
-            return $this.toPrimitiveValue(a) <= $this.toPrimitiveValue(b);
+            return $this.toPrimitiveValue(a) >= $this.toPrimitiveValue(b);
         },
         "==": function(a,b){
             return $this.toPrimitiveValue(a) == $this.toPrimitiveValue(b);
@@ -2260,10 +2260,7 @@ $syl.native = function(serial,args,ressources){
     return new Promise(function(res){
         /**
          * 'out',
-        'tap', 'delete', 'sort','reverse', 'revSort',
-        'filter', 'round','max','min', 'floor','ceil','abs', 'pow', 'join',
-        'str', 'int', 'float', 'bool', 'timer', 'jsExec', 'platform', 'raise',
-        'setState'
+        'delete', 'revSort',
          */
         var natives = {
             tab: function(n){
@@ -2304,7 +2301,7 @@ $syl.native = function(serial,args,ressources){
             expect: function(arg,n,types){
                 if(!$this.isValidateConstraint(arg, types)){
                     $this.cursor = $this.copy(arg.cursor);
-                    throw new Error($this.toStringTypes(types)+" expected for argument "+n+", "+arg.implicitType+" given !");
+                    throw new Error($this.toStringTypes(types)+" expected for argument "+n+" of "+serial.name+", "+arg.implicitType+" given !");
                 }
             },
             rearrange: function(){
@@ -2318,7 +2315,7 @@ $syl.native = function(serial,args,ressources){
                     args[0].value[i] = tmp;
                 }
             },
-            print: function(args){
+            print: function(){
                 var r = '';
                 for(var i in args){
                     // console.log('[Args]',args[i]);
@@ -2335,7 +2332,7 @@ $syl.native = function(serial,args,ressources){
                 console.log("\x1b[43m\x1b[30m", $this.file+" :: "+repere.y+":"+repere.x,"\x1b[0m", r);
                 return null;
             },
-            int: function(args){
+            int: function(){
                 var r = {};
                 for(var i in args){
                     r = args[i];
@@ -2345,7 +2342,17 @@ $syl.native = function(serial,args,ressources){
                 r = isNaN(r) ? 0 : r;
                 return $this.toVariableStructure(r, ressources.parent);
             },
-            len: function(args){
+            float: function(){
+                var r = {};
+                for(var i in args){
+                    r = args[i];
+                    break;
+                }
+                r = parseFloat(r.value);
+                r = isNaN(r) ? 0.0 : r;
+                return $this.toVariableStructure(r, ressources.parent);
+            },
+            len: function(){
                 var r = 0;
                 if('0' in args && 'value' in args[0]){
                     if(['Array', 'JSON'].indexOf(args[0].type)){
@@ -2357,7 +2364,7 @@ $syl.native = function(serial,args,ressources){
                 }
                 return $this.toVariableStructure(r);
             },
-            split: function(args){
+            split: function(){
                 var r = [], separator = '', result = $this.meta({
                     type: 'Array',
                     value: {}
@@ -2374,14 +2381,14 @@ $syl.native = function(serial,args,ressources){
                 }
                 return result;
             },
-            typeof: function(args){
+            typeof: function(){
                 var r = "Any";
                 if('0' in args){
                     r = args[0].implicitType;
                 }
                 return $this.toVariableStructure(r);
             },
-            replace: function(args){
+            replace: function(){
                 this.err(3);
                 var r = args[0].value;
                 this.expect(args[0],0,[{type:'String'}]);
@@ -2390,15 +2397,21 @@ $syl.native = function(serial,args,ressources){
                 r = args[0].value.replace(args[1].value, args[2].value);
                 return $this.toVariableStructure(r);
             },
-            lower: function(args){
+            lower: function(){
                 this.expect(args[0], 0, [{type:'String'},{type:'Number'}]);
-                return $this.toVariableStructure(args[0].value.toLowerCase());
+                var r = $this.toVariableStructure(args[0].value.toLowerCase());
+                r.type = 'String';
+                r.implicitType = 'String';
+                return r;
             },
-            maj: function(args){
+            maj: function(){
                 this.expect(args[0], 0, [{type:'String'},{type:'Number'}]);
-                return $this.toVariableStructure(args[0].value.toUpperCase());
+                var r = $this.toVariableStructure(args[0].value.toUpperCase());
+                r.type = 'String';
+                r.implicitType = 'String';
+                return r;
             },
-            push: function(args){
+            push: function(){
                 this.err(2);
                 this.expect(args[0], 0, [{type: 'Array'}]);
                 var index = $this.len(args[0].value);
@@ -2415,25 +2428,25 @@ $syl.native = function(serial,args,ressources){
                 }
                 return args[0];
             },
-            shift: function(args){
-                this.expect(args[0], 0, [{type: 'Array'}]);
+            shift: function(){
+                this.expect(args[0], 0, [{type: 'Array'}, {type: 'JSON'}]);
                 for(var i in args[0].value){
                     delete args[0].value[i];
                     break;
                 }
-                this.rearrange();
+                if(args[0].type == 'Array' || args[0].implicitType == 'Array'){
+                    this.rearrange();
+                }
                 return args[0];
             },
-            pop: function(args){
-                this.expect(args[0], 0, [{type: 'Array'}]);
+            pop: function(){
+                this.expect(args[0], 0, [{type: 'Array'},{type: 'JSON'}]);
                 var index = $this.len(args[0].value),
+                    json = args[0].type == 'JSON' || args[0].implicitType == 'JSON',
                     indexed = false;
                 for(var i in args){
-                    if(i * 1 > 0 && i){
-                        indexed = true;
-                        if(args[0].value){
-                            delete args[0].value[i];
-                        }
+                    if(typeof args[0].value[args[i].value] != 'undefined'){
+                        delete args[0].value[args[i].value];
                     }
                 }
                 if(!indexed){
@@ -2442,8 +2455,121 @@ $syl.native = function(serial,args,ressources){
                     }
                     delete args[0].value[index];
                 }
-                this.rearrange();
+                if(args[0].type == 'Array' || args[0].implicitType == 'Array'){
+                    this.rearrange();
+                }
                 return args[0];
+            },
+            str: function(){
+                var r = {};
+                for(var i in args){
+                    r = args[i];
+                    break;
+                }
+                r = '"'+r.value.toString()+'"';
+                return $this.toVariableStructure(r, ressources.parent);
+            },
+            sort: function(){
+                this.expect(args[0], 0, [{type: 'Array'}]);
+                var tmp, len = $this.len(args[0].value);
+                for(var i = 0; i < len - 1; i++){
+                    for(var j = i + 1; j < len; j++){
+                        if(args[0].value[i].value > args[0].value[j].value){
+                            tmp = args[0].value[i];
+                            args[0].value[i] = args[0].value[j];
+                            args[0].value[j] = tmp;
+                        }
+                    }
+                }
+                return args[0];
+            },
+            reverse: function(){
+                this.expect(args[0], 0, [{type: 'Array'}]);
+                var tmp, len = $this.len(args[0].value);
+                for(var i = 0; i < len - 1; i++){
+                    if(i < len - 1 - i){
+                        tmp = args[0].value[i];
+                        args[0].value[i] = args[0].value[len - 1 - i];
+                        args[0].value[len - 1 - i] = tmp;
+                    }
+                    else{
+                        break;
+                    }
+                }
+                return args[0];
+            },
+            round: function(){
+                this.expect(args[0], 0, [{type: 'Number'}]);
+                var precision = 0;
+                if('1' in args){
+                    this.expect(args[1], 0, [{type: 'Number'}]);
+                    precision = Math.floor(args[1].value * 1);
+                }
+                var r = Math.round(args[0].value * Math.pow(10,precision)) / Math.pow(10,precision);
+                return $this.toVariableStructure(r);
+            },
+            floor: function(){
+                this.expect(args[0], 0, [{type: 'Number'}]);
+                return $this.toVariableStructure(Math.floor(args[0].value * 1));
+            },
+            ceil: function(){
+                this.expect(args[0], 0, [{type: 'Number'}]);
+                return $this.toVariableStructure(Math.ceil(args[0].value * 1));
+            },
+            abs: function(){
+                this.expect(args[0], 0, [{type: 'Number'}]);
+                return $this.toVariableStructure(Math.abs(args[0].value * 1));
+            },
+            pow: function(){
+                this.err(2);
+                this.expect(args[0], 0, [{type: 'Number'}]);
+                this.expect(args[1], 1, [{type: 'Number'}]);
+                return $this.toVariableStructure(Math.pow(args[0].value * 1, args[1].value * 1));
+            },
+            max: function(max){
+                this.expect(arg[0],0,[{type: 'Number'}]);
+                var r = arg[0].value * 1,
+                    max = $this.set(max, true);
+                for(var i in args){
+                    this.expect(arg[i],i,[{type: 'Number'}]);
+                    r = (max && r > args[i].value) || (!max && r < args[i].value) ? r : args[i].value;
+                }
+                return $this.toVariableStructure(r);
+            },
+            min: function(){
+                return this.max(false);
+            },
+            join: function(){
+                this.err(2);
+                this.expect(args[0], 0, [{type: 'Array'}]);
+                this.expect(args[1], 1, [{type: 'String'}, {type: 'Number'}]);
+                var r = '';
+                for(var i in args[0].value){
+                    r += (r.length ? args[1].value : '')+args[0].value[i].value;
+                }
+                r = $this.toVariableStructure(r);
+                r.type = 'String';
+                r.implicitType = 'String';
+                return r;
+            },
+            bool: function(){
+                return $this.toVariableStructure($this.toBoolean(args[0].value));
+            },
+            raise: function(){
+                throw new Error(args[0].value);
+            },
+            //!TODO : To be implemented
+            plaform: function(){
+                var r = null;
+                return $this.toVariableStructure(r);
+            },
+            timer: function(){
+                var r = null;
+                return $this.toVariableStructure(r);
+            },
+            setState: function(){
+                var r = null;
+                return $this.toVariableStructure(r);
             }
         };
         if(serial.name == 'tap'){
@@ -2460,12 +2586,13 @@ $syl.native = function(serial,args,ressources){
                 });
                 rl.question(message, function(e){
                     rl.close();
+                    e = /[\d]+(\.[\d]+)/.test(e) ? e : '"'+e+'"';
                     res($this.toVariableStructure(e));
                 });
             }
         }
         else{
-            res(natives[serial.name](args));
+            res(natives[serial.name]());
         }
     });
 }
@@ -2805,7 +2932,7 @@ $syl.arguments = function(serial,ressources, calling){
                         }
                     });
                 }
-                else if(Synthetic.Lang.reservedKeys.indexOf(cursor.word) >= 0){
+                else if(Synthetic.Lang.reservedKeys.indexOf(cursor.word) >= 0 && cursor.word != 'null'){
                     if(!calling && cursor.word == 'unset' && !arg.constant){
                         arg.unset = true;
                     }
