@@ -2277,7 +2277,7 @@ $syl.native = function(serial,args,ressources){
                 if(array > 0){
                     for(var i in e.value){
                         r += r.length == 1 && array > 1 ? '\n' : '';
-                        r += (r.length >= 2 ? ", "+(array > 1 ? '\n' : '') : "")+(array > 1 ? " "+this.tab(n) : "")+(array == 1 ? "": i+" : ")+this.struct(e.value[i], n+1);
+                        r += (r.length >= 3+(array > 1 ? 0 : -1) ? ", "+(array > 1 ? '\n' : '') : "")+(array > 1 ? " "+this.tab(n) : "")+(array == 1 ? "": i+" : ")+this.struct(e.value[i], n+1);
                     }
                     r += r.length > 1 && array > 1 ? '\n' : '';
                 }
@@ -3165,6 +3165,7 @@ $syl.method = function(serial,ressources){
 */
 $syl.litteral = function(litteral,ressources){
     var $this = this,
+        assignType = this.currentType,
         type = this.getType(),
         syntObject = $this.find(litteral),
         redefinition = this.currentType != null,
@@ -3284,6 +3285,9 @@ $syl.litteral = function(litteral,ressources){
                     if(exist && cursor.char == '=' && resultValue && ( resultValue.constant || resultValue.final ) ){
                         throw new Error($this.err("cannot override [ "+litteral+" ] declared previously as "+(resultValue.constant ? 'constant' : 'final')+" !"));
                     }
+                    if(!exist && assignType != null){
+                        $this.currentType = assignType;
+                    }
                     /**
                      * On doit donner à la variable la clé 'value' pour ne pas être supprimée
                      * Si on est entrain de la créer
@@ -3296,9 +3300,13 @@ $syl.litteral = function(litteral,ressources){
                         object: exist ? resultValue && !settingKey ? resultValue : settingKey : serial, 
                         subvariables: false, 
                         ressources:ressources,
-                        ternary: false
+                        ternary: false,
+                        end: $this.currentType != null ? [Synthetic.Lang.constants._EOS.COMA] : []
                     }).then(function(result){
                         // console.log('[result]',litteral,exist,'/',result, $this.executing, $this.modules);
+                        if($this.code[$this.cursor.index-1] == ','){
+                            $this.currentType = assignType;
+                        }
                         if(exist){
                             if(settingKey){
                                 settingKeyObject.value[settingKey.name] = $this.extend(settingKey, result);
@@ -3735,7 +3743,7 @@ $syl.if = function(ressources, data){
         var parentheseless = false,
             executing = $this.executing,
             braceless = false,
-            reason = false;
+            reason = true;
         // console.log('[Type]',data.type, $this.previousReason);
         if(data.type == 0){
             $this.previousReason = null;   
@@ -3745,7 +3753,7 @@ $syl.if = function(ressources, data){
          * Si aucune raison précédente n'a été définie alors qu'on ne traite pas un if,
          * on lève une exception
          */
-        if(previousReason == null && data.type > 0){
+        if(previousReason === null && data.type > 0){
             throw new Error($this.err("syntax error ! can't read "+(data.type == 1 ? "elif" : "else")+" statement without a previous if or elif statement !"));
         }
         $this.toNextChar().then(function(_char){
@@ -3782,6 +3790,8 @@ $syl.if = function(ressources, data){
              * Traitement pour les if/elif
              */
             else{
+                $this.executing = executing && !previousReason;
+                // reason = $this.executing;
                 parentheseless = _char != '(';
                 $this.backTo(_char.length - 1);
                 if(!parentheseless){
@@ -3802,8 +3812,14 @@ $syl.if = function(ressources, data){
                     }
                     braceless = $this.code[$this.cursor.index + (parentheseless ? 1 : 0)] != '{';
                     reason = !$this.executing ? false : $this.toBoolean(value.value);
-                    if(!reason || (previousReason !== null && !previousReason) ){
+                    
+                    if(!reason || (previousReason !== null && previousReason) ){
                         $this.executing = false;
+                        /**
+                         * Si la raison actuelle est fausse
+                         * on doit encore garder la raison précédente
+                         */
+                        reason = previousReason === null ? reason : previousReason;
                     }
                     // console.log('[reason]',$this.previousReason,braceless);
                     if(!braceless){

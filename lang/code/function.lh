@@ -77,9 +77,12 @@ Number age = int tap "Votre age : "
 
 print "Bonsoir " + prenom + " "+ nom+" ! agé de "+age+" ans";
 
-if age >= 18 {
-    print "Vous êtes donc majeur !"
+if age < 18 {
+    print "Vous êtes donc mineur !"
+}
+elif age <= 50 {
+    print "Vous êtes jeune et adulte !"
 }
 else{
-    print "Vous êtes donc mineur !"
+    print "Vous êtes donc majeur et vieu !"
 }
