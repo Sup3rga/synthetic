@@ -1,25 +1,27 @@
-// String nom = "Bien"
+String nom = "bien"
 
-// Array test = [nom == "Bien" ? 30 : 10 > 3 ? "bien" : "bad", 50]
-// JSON<...> ok = { bien : "Ok" + " cool", "pardon" : "Pardon !",nom}
+Array test = [nom == "Bien" ? 30 : 10 > 3 ? "bien" : "bad", 50]
+JSON<...> ok = { bien : "Ok" + " cool", "pardon" : 5 < 4 ? "Pardon !" : "OOh !",nom}
 
-// ok.bien = "cool !"
+print (test,ok)
 
-JSON ok = {
-    bien : "Pas mal !",
-    fn : (nom){
-        print "cool "+nom+" !"
-        return { 
-            nom
-        }
-    },
-    cool: "bien"
-}
+ok.bien = "cool !"
+
+// JSON ok = {
+//     bien : "Pas mal !",
+//     fn : (nom){
+//         print "cool "+nom+" !"
+//         return { 
+//             nom
+//         }
+//     },
+//     cool: "bien"
+// }
 // {
 //     bien : int("20"),
 //     test: {
 //         index: 0
 //     }
 // }
-print ok.fn("yeah")
+// print ok.fn("yeah")
 // print ok["cool"]//["index"]

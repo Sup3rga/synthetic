@@ -84,5 +84,5 @@ elif age <= 50 {
     print "Vous êtes jeune et adulte !"
 }
 else{
-    print "Vous êtes donc majeur et vieu !"
+    print "Vous êtes donc majeur et vieux !"
 }
