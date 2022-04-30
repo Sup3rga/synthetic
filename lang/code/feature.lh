@@ -1,0 +1,14 @@
+/**
+* Importer du javascript et exécuter ses fonctions à la volée
+* avec les mots-clés 'refer' et 'external'
+* 'refer' : pour l'importation
+* 'callback' : pour la communication par callback
+*/
+refer './js/WaveSurfer.min.js'
+use WaveSurfer
+
+Any Wave = new WaveSurfer('.dom-container', SML.find('.bien'))
+
+Wave.on('ready', external(e){
+    print "[E] " + e.page.X
+})

@@ -17,6 +17,7 @@
 
 // String setUp(JSON list){
 //     print list["bien"]
+//     return ""
 // }
 // _nom = "Jean"
 // debug (_nom+" ok", _nom)
@@ -28,7 +29,7 @@
 //     bien : "Ok"
 // })
 
-// prenom = "Julien"
+// // prenom = "Julien"
 
 // String test(String nom : (tester){
 //     return tester + " !!!"
@@ -55,34 +56,55 @@
 // alias = fn("Bien")
 
 // alias "Synthetic"
-// print test "le bonjour"
-// print test "le bonsoir"
+// // print test "le bonjour"
+// // print test "le bonsoir"
 
 // String fn(String nom){
 //     print "Bonjour " + nom + " !"
-//     return null
+//     return "nulsl"
 // }
 
 // host(callback,test){
-//     callback test
+//     callback(test)
+//     // print "bien"
 // }
 
 // host(fn, "Jacques")
-// test = null
+// override test = null
 // print test
 
-String nom = maj tap "Votre nom : "
-String prenom = tap "Votre prenom : "
-Number age = int tap "Votre age : "
+// String nom = maj tap "Votre nom : "
+// String prenom = tap "Votre prenom : "
+// Number age = int tap "Votre age : "
 
-print "Bonsoir " + prenom + " "+ nom+" ! agé de "+age+" ans";
+// debug "Bonsoir " + prenom + " "+ nom+" ! agé de "+age+" ans";
 
-if age < 18 {
-    print "Vous êtes donc mineur !"
+// if age < 18 {
+//     print "Vous êtes donc mineur !"
+// }
+// elif age <= 50 {
+//     debug "Vous êtes jeune et adulte !"
+// }
+// else{
+//     print "Vous êtes donc majeur et vieux !"
+// }
+
+String test(e){
+    // print ("E", e)
+    return e
 }
-elif age <= 50 {
-    print "Vous êtes jeune et adulte !"
+
+JSON<String,String> callbacks = {}
+
+callbacks.bien = test;
+
+// callbacks.hors "Bien !"s
+
+// print callbacks
+
+prime(callable unset String bien){
+    print "Cool !"
+    print bien "cool"
 }
-else{
-    print "Vous êtes donc majeur et vieux !"
-}
+
+prime callbacks.bien

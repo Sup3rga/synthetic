@@ -343,6 +343,7 @@ $syl.meta = function(options,autosave){
         },
         type: 'Any', // le type de valeur: par exemple : Any, Number, String,
         implicitType: null,
+        labelConstraint: null,
         typeOrigin: null,
         constraints: null,
         native: false,
@@ -507,6 +508,7 @@ $syl.loop = function(callback,cursor,stringless){
                         if(!wrapper.quote && !wrapper.simple_quote && !wrapper.comment && !wrapper.regex){
                             $this.fixScope(false);
                             if($this.cursor.scope < 0){
+                                console.log('[Error SRC]', $this.code.substr($this.cursor.index-10, 20));
                                 throw new Error($this.err("illegal char [ "+$this.code[cursor]+" ]"))
                             }
                             // $this.cursor.scope = $this.cursor.scope < 0 ? 0 : $this.cursor.scope;
@@ -634,6 +636,7 @@ $syl.goTo = function(addition){
                 case '\n':
                     this.cursor.lines.y++;
                     this.cursor.lines.x = 0;
+                    this.saveLines();
                 break;
                 case '{':
                     this.fixScope(true);
@@ -661,7 +664,7 @@ $syl.saveLines = function(){
         return;
     }
     this.lastIndex.line = this.cursor.index;
-    if(this.code[this.cursor.index] == '\n'){
+    if(this.code[this.cursor.index] == '\n' && this.linesEnd.indexOf(this.cursor.index) < 0){
         this.linesEnd.push(this.cursor.index);
         // console.log('[Lines]',this.linesEnd);
     }
@@ -779,6 +782,7 @@ $syl.genericType = function(type,origin){
                     if(!savetype()){
                         throw new Error($this.err("illegal expression [ "+cursor.char+" ]"));
                     }
+                    $this.goTo(1);
                 }
                 else if(cursor.char == '.'){
                     if($this.code.substr(cursor.index, 3) == '...'){
@@ -803,6 +807,7 @@ $syl.genericType = function(type,origin){
                         // console.log(type.constraints, _dictMod)
                         throw new Error($this.err("illegal character [ , ]"));
                     }
+                    $this.goTo(1);
                 }
                 //Dès qu'on rencontre le caractère '>', on arrête tout puis on résout la promesse
                 else if(cursor.char == '>'){
@@ -1213,6 +1218,7 @@ $syl.struct = function(data){
             value: {},
             parent: data.ressources.parent
         }), key = null, index = 0,
+        _scope, _isCallable = false,
         _cursor = $this.copy($this.cursor),
         object;
         // console.log('[Call][Struct]')
@@ -1237,6 +1243,10 @@ $syl.struct = function(data){
                     name: _type == 'JSON' ? key : null,
                     constraints: !data.object.constraints ? null : data.object.constraints.value[0].constraints,
                 }, false);
+                /**
+                 * On mémorise le scope pour le restaurer ensuite
+                 */
+                _scope = $this.cursor.scope;
                 $this.value({
                     object: object,
                     subvariables: true,
@@ -1245,14 +1255,49 @@ $syl.struct = function(data){
                 }).then(function(result){
                     // console.log('[Result]',key,$this.executing,result);
                     if($this.executing){
-                        if(result.label != 'function'){
+                        $this.cursor.scope = _scope;
+                        _isCallable = result && $this.isCallable(result);
+                        if(_isCallable){
+                            object = $this.copy(result);
+                        }
+                        else{
                             object = result;
                         }
+                        if(structure.constraints){
+                            if(_isCallable && structure.constraints.value.length > 1 && !$this.isValidateConstraint("Any", structure.constraints.value)){
+                                $this.cursor = $this.copy(_cursor);
+                                throw new Error($this.err("to much return value types !"));
+                            }
+                            /**
+                             * Si le resulta est un external, on vérifier qu'il n'y a acceptation que
+                             * du type 'Any'
+                             */
+                            if(object.label == 'external' && !$this.isValidateConstraint('Any', object.constraints.value)){
+                                $this.cursor = $this.copy(_cursor);
+                                throw new Error($this.err("external structure don't support other type than Any, "+structure.constraints.value[0].type+" was given !"));
+                            }
+                            /**
+                             * Si c'est une fonction et que le type est Any
+                             * On lui passe le type principale de la contrainte de la 
+                             * structure
+                             */
+                            if(result.type == 'Any' && $this.isCallable(objet)){
+                                objet.type =  structure.constraints.value[0].type;
+                            }
+                            /**
+                             * Sinon Si le type de la valeur n'est pas compatible aux contraintes
+                             * de la structure, on lève une erreur
+                             */
+                            else if(!$this.isValidateConstraint(object, structure.constraints.value)){
+                                $this.cursor = $this.copy(_cursor);
+                                throw new Error($this.err($this.toStringTypes(structure.constraints.value)+" value expected, "+object.implicitType+" given !"));
+                            }
+                        }
                     }
-                    if(data.object.constraints && !$this.isValidateConstraint(result, data.object.constraints.value)){
-                        if(['Array', 'JSON'].indexOf(result.type) < 0 || !data.object.constraints.recursive){
+                    if(data.object.constraints && !$this.isValidateConstraint(object, data.object.constraints.value)){
+                        if(['Array', 'JSON'].indexOf(object.type) < 0 || !data.object.constraints.recursive){
                             $this.cursor = _cursor;
-                            throw new Error($this.err($this.toStringTypes(data.object.constraints.value)+" value expected, "+result.implicitType+" given !"));
+                            throw new Error($this.err($this.toStringTypes(data.object.constraints.value)+" value expected, "+object.implicitType+" given !"));
                         }
                     }
                     if(_type == 'Array'){
@@ -1361,6 +1406,10 @@ $syl.struct = function(data){
                             }
                         }
                     });
+                }
+                else if(cursor.char == '}'){
+                    // console.log('[End][Struct]',cursor.char, structure);
+                    loop.end();
                 }
             }
         }).then(function(){
@@ -1500,6 +1549,16 @@ $syl.value = function(data){
                     $this.litteral(cursor.word, data.ressources).then(function(result){
                         // if(data.subvalue && !result)
                         // console.log('[Result]', data.subvalue,result == null, $this.tryMethodInsteadConfirmed);
+                        if(result && result.label == 'type'){
+                            if(data.subvalue){
+                                $this.tryMethodInsteadConfirmed = true;
+                                loop.end();
+                                return;
+                            }
+                            else{
+                                throw new Error($this.err("invalid syntax !"));
+                            }
+                        }
                         values.push(result);
                         waitingForNextOperand = false;
                         // console.log('[Litt____]',cursor.char,'//',$this.code.substr($this.cursor.index, 10));
@@ -1530,6 +1589,14 @@ $syl.value = function(data){
                      */
                     if(cursor.word == "null"){
                         values.push($this.toVariableStructure(null, data.ressources));
+                    }
+                    else if(['external', 'callable'].indexOf(cursor.word) >= 0){
+                        loop.stop();
+                        $this[cursor.word](data.ressources).then(function(method){
+                            values.push(method);
+                            loop.start();
+                        });
+                        return;
                     }
                     else{
                         throw new Error($this.err("invalid syntax !"));
@@ -1736,6 +1803,7 @@ $syl.value = function(data){
                         }
                         _cursor = $this.copy($this.cursor);
                         loop.stop();
+                        // _lastWordCursor.index++;
                         $this.goTo(1);
                         /**
                          * Il se pourrait qu'on ait la difficulté de différencier
@@ -1783,7 +1851,6 @@ $syl.value = function(data){
                                 else{
                                     values.push(result);
                                 }
-                                
                                 waitingForNextOperand = false;
                                 loop.start();
                             });
@@ -1841,14 +1908,23 @@ $syl.value = function(data){
             // console.log('[Values]',values);
             var r = $this.executing ? $this.calc(values) : null;
             if($this.executing && !data.subvariables && !data.subvalue && data.object.type != 'Any' && (!r || (r.type != data.object.type && r.implicitType != data.object.type)) ){
-                $this.cursor = data.object.cursor;
-                throw new Error($this.err(data.object.type+" value expected, "+(r ? r.implicitType : "Any" )+" given !"));
+                // console.log('[R]',r);
+                if(!r || !('labelConstraint' in r && r.labelConstraint == 'callable' && r.label == 'function')){
+                    $this.cursor = data.object.cursor;
+                    // console.log('[R]',r);
+                    throw new Error($this.err(data.object.type+" value expected, "+(r ? r.implicitType : "Any" )+" given !"));
+                }
             }
             else if($this.executing && data.subvariables && data.object.constraints && (!r || !$this.isValidateConstraint(r, data.object.constraints.value)) ){
                 if(!r || ['Array', 'JSON'].indexOf(r.type) < 0 || !data.object.constraints.recursive){
                     throw new Error($this.err($this.toStringTypes(data.object.constraints.value)+" value expected, "+(!r ? "Any" : r.type)+" given !"));
                 }
             }
+            // if('labelConstraint' in r && r.labelConstraint == 'callable' && r.label == 'function'){
+            //     r.type = data.object.type;
+            //     r.implicitType = data.object.implicitType;
+            //     data.object.labelConstraint = 'callable';
+            // }
             $this.garbage();
             res(r);
         })
@@ -2319,7 +2395,7 @@ $syl.cursorOrigin = function(index){
  * La méthode isCallable permet de savoir si un objet peut être invoqué
  */
 $syl.isCallable = function(object){
-    return object && ['function'].indexOf(object.label) >= 0;
+    return object && ['function','external'].indexOf(object.label) >= 0;
 }
 
 /**
@@ -2354,7 +2430,7 @@ $syl.native = function(serial,args,ressources){
                     r += r.length > 1 && array > 1 ? '\n' : '';
                 }
                 else{
-                    r += e && (e.type == 'String' || e.implicitType == 'String' && n > 0) ? 
+                    r += e && (e.type == 'String' || e.implicitType == 'String') && n > 0 && !$this.isCallable(e) ? 
                                 '"'+e.value+'"' : 
                                 e ? 
                                     'value' in e ? e.value : e.label+" ["+e.addr+"]"
@@ -2676,8 +2752,6 @@ $syl.caller = function(callable,ressources){
     if(callable.ref in this.modules){
         delete this.modules[callable.ref];
     }
-    //! TODO : modifier l'incohérence des arguments des callbacks
-    // console.log('[Call]',callable.name, callable.arguments);
     return new Promise(function(res){
         $this.toNextChar().then(function(_char){
             // console.log('[code]',$this.code.substr($this.cursor.index, 10));
@@ -2724,9 +2798,10 @@ $syl.caller = function(callable,ressources){
                          * On copie les données actuelles du curseur pour les restaurer après !
                          */
                         cursor = $this.copy($this.cursor);
+                        cursor.lines = $this.cursorOrigin(cursor.index);
+                        // console.log('[CALL][PARSING]', callable.name, cursor.lines);
                         $this.cursor = $this.copy(callable.scopeCursor);
                         // $this.cursor.index++;
-                        // console.log('[CALL][PARSING]')
                         $this.parse({
                             parent : callable.addr
                         },{
@@ -2744,17 +2819,18 @@ $syl.caller = function(callable,ressources){
                             if(!$this.isValidateConstraint(response, callable.type)){
                                 throw new Error($this.err(" "+callable.type+" expected, "+response.type+" given"));
                             }
-                            if(callable.braced){
-                                $this.toNextChar().then(function(__char){
-                                    $this.cursor = $this.copy(cursor);
-                                    res(response);
-                                });
-                            }
-                            else{
+                            // if(callable.braced){
+                            //     $this.toNextChar().then(function(__char){
+                            //         $this.cursor = $this.copy(cursor);
+                            //         res(response);
+                            //     });
+                            // }
+                            // else{
                                 // $this.cursor.scope--;
+                                // console.log('[CURSOR]',callable.name, cursor);
                                 $this.cursor = $this.copy(cursor);
                                 res(response);
-                            }
+                            // }
                         })
                     }
                 }
@@ -2769,7 +2845,7 @@ $syl.arguments = function(serial,ressources, calling){
     var $this = this,
         calling = $this.set(calling, false);
     return new Promise(function(res){
-        var _arguments = {},
+        var _arguments = {}, _typeset = false,
             arg, index = 0, _cursor, _reachCursor, _arg,
             withParenthese = 0, callCertitude = 0;
         if(calling){
@@ -2794,12 +2870,15 @@ $syl.arguments = function(serial,ressources, calling){
                 implicitType: 'Any',
                 value: null,
                 unset: false,
+                callable: false,
+                external: false,
                 constant: false
             },false),_r;
             if(calling){
                 _r = getArg(index);
                 r = _r ? _r : r;
             }
+            _typeset = false;
             return r;
         }
         arg = resetArg();
@@ -2808,6 +2887,7 @@ $syl.arguments = function(serial,ressources, calling){
             if(cursor.char == ','){
                 if(cursor.word){
                     if(!calling && arg.constant){
+                        $this.cursor = $this.copy(_cursor);
                         throw new Error($this.err("argument [ "+arg.name+" ] must have default value !"));
                     }
                     if(!calling){
@@ -2820,7 +2900,8 @@ $syl.arguments = function(serial,ressources, calling){
                     else{
                         _arg = getArg(index);
                         if(_arg && _arg.constant){
-                            throw new Error($this.err("error from trying to set value of [ "+_arg.name+" ] !"));
+                            $this.cursor = $this.copy(_cursor);
+                            throw new Error($this.err("error from trying to set value of argument [ "+_arg.name+" ] declared constant !"));
                         }
                         _arguments[index] = typeof cursor.word == 'object' ? cursor.word : $this.toVariableStructure(cursor.word);
                     }
@@ -2862,7 +2943,28 @@ $syl.arguments = function(serial,ressources, calling){
                     ternary: false,
                     end: [Synthetic.Lang.constants._EOS.COMA, Synthetic.Lang.constants._EOS.PARENTHESE]
                 }).then(function(result){
+                    /**
+                     * On doit déléguer les type si c'est une fonction
+                     */
+                    // if(result && result.label == 'function'){
+                    //     result.type = arg.type;
+                    //     result.implicitType = arg.implicitType;
+                    // }
                     // console.log('[Result]',result);
+                    /**
+                     * S'il y a contraint 'callable' de label sur l'argument
+                     * pn verifie qu'il reçoit bien un callable ('external', 'function')
+                     */
+                    if(arg.callable && ['external', 'function'].indexOf(result.label) < 0){
+                        throw new Error($this.err("callable structure expected, "+result.label+" structure given !"));
+                    }
+                    /**
+                     * S'il y a contraint 'external' de label sur l'argument
+                     * pn verifie qu'il reçoit bien un external
+                     */
+                    if(arg.external && result.label != 'external'){
+                        throw new Error($this.err("external expected, "+result.label+" given !"));
+                    }
                     arg.implicitType = result.implicitType;
                     arg.value = result.value;
                     arg.index = index;
@@ -2917,6 +3019,8 @@ $syl.arguments = function(serial,ressources, calling){
                     }
                     _arguments[index] = typeof cursor.word == 'object' ? cursor.word : $this.toVariableStructure(cursor.word,serial.parent);
                     if(/[\S]+/.test(cursor.char)){
+                        // console.log('[Char]',serial.name);
+                        // if(serial.name == 'debug') console.log(serial);
                         $this.backTo(cursor.char.length - (cursor.char.length == 1 ? 1 : 0));
                     }
                     // console.log('[END][Args]',$this.code.substr($this.cursor.index, 10));
@@ -2929,6 +3033,7 @@ $syl.arguments = function(serial,ressources, calling){
         }
         function saveArgument(cursor,loop){
             return new Promise(function(_res,_rej){
+                // console.log('Cursor',cursor.word, '/', cursor.char, calling);
                 if(calling && cursor.char != ':' && cursor.word && typeof cursor.word != 'object'){
                     loop.stop();
                     $this.cursor = $this.copy(_cursor);
@@ -2939,9 +3044,27 @@ $syl.arguments = function(serial,ressources, calling){
                         ressources: ressources,
                         end: [Synthetic.Lang.constants._EOS.COMA, Synthetic.Lang.constants._EOS.PARENTHESE]
                     }).then(function(result){
-                        // if(result.label == 'function'){
-                        //     console.log('[Result]',serial.name+"::",cursor.word, result,'/',$this.code.substr($this.cursor.index-1,10));
+                        /**
+                         * On doit déléguer les type si c'est une fonction
+                         */
+                        // if(result && result.label == 'function'){
+                        //     result.type = arg.type;
+                        //     result.implicitType = arg.implicitType;
                         // }
+                        /**
+                         * S'il y a contraint 'callable' de label sur l'argument
+                         * pn verifie qu'il reçoit bien un callable ('external', 'function')
+                         */
+                        if(arg.callable && ['external', 'function'].indexOf(result.label) < 0){
+                            throw new Error($this.err("callable expected, "+result.label+" given !"));
+                        }
+                        /**
+                         * S'il y a contraint 'external' de label sur l'argument
+                         * pn verifie qu'il reçoit bien un external
+                         */
+                        if(arg.external && result.label != 'external'){
+                            throw new Error($this.err("external expected, "+result.label+" given !"));
+                        }
                         var _char = $this.code[$this.cursor.index-1];
                         /**
                          * Si le caractère précédent est une ")", on doit pas procéder
@@ -2949,25 +3072,25 @@ $syl.arguments = function(serial,ressources, calling){
                          */
                         // console.log('[ARG][Litt]','>'+$this.code.substr($this.cursor.index,10), '/', _char, result)
                         if([')'].indexOf(_char) >= 0){
-                            _cursor = $this.copy($this.cursor);
                             $this.cursor.index--;
                             finishSavingArgument({char: _char, word: result}, loop,_res);
+                            _cursor = $this.copy($this.cursor);
                         }
                         else{
                             // console.log('[Master]****',cursor.word, '/', _char, '/','>'+$this.code.substr($this.cursor.index-1,10))
                             $this.toNextChar().then(function(__char){
-                                _cursor = $this.copy($this.cursor);
                                 // console.log('[Char]',_char, '/', __char);
                                 // console.log('[HERE]',$this.code[$this.cursor.index - 1],_char,withParenthese)
                                 // console.log('[ARG][Litt]',cursor.word, '>'+$this.code.substr($this.cursor.index,10))
                                 finishSavingArgument({char: _char, word: result}, loop,_res);
+                                _cursor = $this.copy($this.cursor);
                             });
                         }
                     });
                 }
                 else{
-                    _cursor = $this.copy($this.cursor);
                     finishSavingArgument(cursor,loop,_res);
+                    _cursor = $this.copy($this.cursor);
                 }
             });
         }
@@ -2984,13 +3107,48 @@ $syl.arguments = function(serial,ressources, calling){
              */
             //  console.log('[Cursor]',cursor);
             if(cursor.word && cursor.word.length){
-                // console.log('[Word]',cursor.word);
+                // console.log('[Word]',cursor.word, calling);
                 if(Synthetic.Lang.reservedKeys.indexOf(cursor.word) >= 0 && cursor.word != 'null'){
+                    if(_typeset){
+                        throw new Error($this.err("syntax error near by [ "+arg.type+" ... "+cursor.word+" ] !"));
+                    }
                     if(!calling && cursor.word == 'unset' && !arg.constant){
                         arg.unset = true;
                     }
                     else if(!calling && cursor.word == 'const' && !arg.unset){
                         arg.constant = true;
+                    }
+                    else if(['callable', 'external'].indexOf(cursor.word) >= 0){
+                        if(!calling){
+                            arg[cursor.word] = true;
+                        }
+                        else{
+                            loop.stop();
+                            $this[cursor.word](ressources).then(function(method){
+                                /**
+                                 * S'il y a contraint 'external' de label sur l'argument
+                                 * pn verifie qu'il reçoit bien un external
+                                 */
+                                if(arg.external && method.label != 'external'){
+                                    $this.cursor = $this.copy(_cursor);
+                                    throw new Error($this.err("external expected !"));
+                                }
+                                if(method.label != 'external'){
+                                    /**
+                                     * Il faut donner par référence le type de l'argument au callable
+                                     */
+                                    method.type = arg.type;
+                                    method.implicitType = arg.implicitType;
+                                }
+                                $this.toNextChar().then(function(_char){
+                                    saveArgument({char:_char, word: method}, loop).then(function(){
+                                        _cursor = $this.copy($this.cursor);
+                                        loop.start();
+                                    });
+                                });
+                            });
+                            return;
+                        }
                     }
                     else{
                         throw new Error($this.err("invalid syntax near [ "+cursor.word+" ] !"));
@@ -3001,10 +3159,18 @@ $syl.arguments = function(serial,ressources, calling){
                     loop.stop();
                     $this.litteral(cursor.word,{parent: null},true).then(function(type){
                         if(type && type.label == 'type'){
-                            if(arg.name || calling){
+                            if(arg.name || calling || (serial.label == 'external' && type.name != 'Any')){
+                                if(serial.label == 'external'){
+                                    throw new Error("externals function don't support other type than Any");
+                                }
                                 throw new Error($this.err("invalid syntax !"));
                             }
+                            if(arg.external && type.type != 'Any'){
+                                throw new Error($this.err("syntax error, external don't support other type than Any !"));
+                            }
                             arg.type = type.type;
+                            arg.implicitType = type.type;
+                            _typeset = true;
                             arg.typeOrigin = type.origin,
                             $this.toNextChar().then(function(char){
                                 if(char == '<'){
@@ -3096,7 +3262,7 @@ $syl.arguments = function(serial,ressources, calling){
         })
         .then(function(){
             // $this.goTo(1);
-            // console.log('[Arg][result]',serial.name+"::", $this.len(_arguments),_arguments);
+            // console.log('[Arg][result]',serial.name+"::", calling, $this.len(_arguments), $this.code.substr($this.cursor.index, 10));
             if(withParenthese != 0){
                 /**
                  * Il se peut qu'un argument ait le même nom qu'une fonction définie,
@@ -3158,7 +3324,9 @@ $syl.method = function(serial,ressources){
     return new Promise(function(res,rej){
         var savingArg = false,executing = $this.executing,
             scope;
-        serial.label = 'function';
+        if(serial.label != 'external'){
+            serial.label = 'function';
+        }
         serial.arguments = {};
         serial.scopeCursor = $this.cursor;
         //On définit si la fonction a des accollades
@@ -3173,6 +3341,7 @@ $syl.method = function(serial,ressources){
                 $this.fixScope(true);
                 $this.arguments(serial,ressources)
                 .then(function(arg){
+                    // console.log("[Method][Arg]",serial.name+"::", $this.code.substr($this.cursor.index, 10), $this.cursor.scope);
                     $this.toNextChar().then(function(_char){
                         /**
                          * On doit décrémenter le scope parce qu'on l'avait incrémenté avant la
@@ -3210,7 +3379,7 @@ $syl.method = function(serial,ressources){
                 end: [Synthetic.Lang.constants._EOS.BRACE],
                 statementCount: serial.braced ? -1 : 1
             }).then(function(){
-                // console.log('[PARSE][END]',serial.name,'/', $this.code.substr($this.cursor.index-10, 10));
+                // console.log('[PARSE][END]',serial.name,'/', $this.code.substr($this.cursor.index, 10), $this.cursor.scope);
                 /**
                  * Si la function a des accolades, il faut que le EOS soit un "}"
                  * sinon on déclenche une erreur
@@ -3220,6 +3389,14 @@ $syl.method = function(serial,ressources){
                 if(serial.braced && $this.code[$this.cursor.index] != '}'){
                     // console.log('[Execution]', $this.code.substr($this.cursor.index, 10));
                     throw new Error($this.err("[ } ] expected !"));
+                }
+                /**
+                 * Si on pense que c'est une fonction alors qu'elle n'avait pas d'accollade
+                 * de debut, on enlève la décompte de scope faite précédemment !
+                 */
+                if(!serial.braced && $this.code[$this.cursor.index] == '}'){
+                    // console.log('******[HELP]', serial.name, $this.cursor.scope);
+                    $this.cursor.scope++;
                 }
                 if(serial.braced){
                     $this.goTo(1);
@@ -3233,6 +3410,63 @@ $syl.method = function(serial,ressources){
         }).then(function(){
             res(serial);
         })
+    });
+}
+/**
+ * La méthode external permet de définir une fonction orientée usage externe comme:
+ *  * pont callback entre 'Synthetic' et une autre langage (ici: 'Javascript')
+ */
+$syl.external = function(ressources){
+    var $this = this,
+        serial = this.meta({
+            type: 'Any',
+            label: 'external',
+            parent: ressources.parent
+        });
+    return new Promise(function(res){
+        $this.loop(function(cursor,loop){
+            if(cursor.word && cursor.word.length){
+                if($this.getCodeType(cursor.word) == Synthetic.Lang.constants.LITTERAL){
+                    serial.name = cursor.word;
+                }
+                else{
+                    throw new Error($this.err("syntax error near by [ "+$this.code.substr($this.cursor.index-5,10)+" ]"));
+                }
+            }
+            if(cursor.char == '('){
+                loop.stop();
+                $this.method(serial,ressources).then(function(method){
+                    loop.end();
+                    res(method);
+                });
+            }
+        });
+    });
+}
+/**
+ * La méthode callable permet de définir sainement une fonction
+ */
+$syl.callable = function(ressources){
+    var $this = this,
+        serial = this.meta({
+            type: 'Any',
+            label: 'function',
+            labelConstraint: 'callable',
+            parent: ressources.parent
+        });
+    return new Promise(function(res){
+        $this.loop(function(cursor,loop){
+            if(cursor.word && cursor.word.length){
+                throw new Error($this.err("syntax error near by [ ..."+$this.code.substr($this.cursor.index-5,10)+"... ]"));
+            }
+            if(cursor.char == '('){
+                loop.stop();
+                $this.method(serial,ressources).then(function(method){
+                    loop.end();
+                    res(method);
+                });
+            }
+        });
     });
 }
 /**
@@ -3264,7 +3498,7 @@ $syl.litteral = function(litteral,ressources,ref){
         resultValue = exist ? syntObject : null,
         _cursor;
         // console.log('[Result]', resultValue, litteral);
-        if(!exist){
+        if(!exist ){
             // console.log('[Modules]',litteral,$this.modules);
         }
         else{
@@ -3399,7 +3633,41 @@ $syl.litteral = function(litteral,ressources,ref){
                         }
                         if(exist){
                             if(settingKey){
-                                settingKeyObject.value[settingKey.name] = $this.extend(settingKey, result);
+                                /**
+                                 * Si c'est un callable
+                                 * On doit vérifier que le type de retour n'est pas multiple
+                                 */
+                                if($this.isCallable(result) && serial.constraints && serial.constraints.value.length > 1 && !$this.isValidateConstraint("Any", serial.constraints.value)){
+                                    $this.cursor = $this.copy(_cursor);
+                                    throw new Error($this.err("too much return value types !"));
+                                }
+                                settingKeyObject.value[settingKey.name] = $this.extend(settingKey, $this.copy(result));
+                                if(serial.constraints){
+                                    /**
+                                     * Si le resulta est un external, on vérifier qu'il n'y a acceptation que
+                                     * du type 'Any'
+                                     */
+                                    if(result.label == 'external' && !$this.isValidateConstraint('Any', serial.constraints.value)){
+                                        $this.cursor = $this.copy(_cursor);
+                                        throw new Error($this.err("external structure don't support other type than Any, "+serial.constraints.value[0].type+" was given !"));
+                                    }
+                                    /**
+                                     * Si c'est une fonction et que le type est Any
+                                     * On lui passe le type principale de la contrainte de la 
+                                     * structure
+                                     */
+                                    if(result.type == 'Any' && $this.isCallable(result)){
+                                        settingKeyObject.value[settingKey.name].type =  serial.constraints.value[0].type;
+                                    }
+                                    /**
+                                     * Sinon Si le type de la valeur n'est pas compatible aux contraintes
+                                     * de la structure, on lève une erreur
+                                     */
+                                    else if(!$this.isValidateConstraint(result, serial.constraints.value)){
+                                        $this.cursor = $this.copy(_cursor);
+                                        throw new Error($this.err($this.toStringTypes(serial.constraints.value)+" value expected, "+result.implicitType+" given !"));
+                                    }
+                                }
                             }
                             else{
                                 var tmp = {
@@ -3420,9 +3688,12 @@ $syl.litteral = function(litteral,ressources,ref){
                                     throw new Error($this.err("previous syntax error detected !"));
                                 }
                                 serial.implicitType = result.implicitType;
-                                if(["function"].indexOf(result.label) >= 0){
+                                if(["function", 'external'].indexOf(result.label) >= 0){
                                     serial.label = result.label;
                                 }
+                                // if(["function"].indexOf(result.label) >= 0){
+                                //     serial.label = result.label;
+                                // }
                                 _cursor = $this.copy($this.cursor);
                                 created = true;
                                 resultValue = serial;
@@ -3576,7 +3847,7 @@ $syl.litteral = function(litteral,ressources,ref){
                             throw new Error($this.err("[ "+litteral+" ] is undefined !"));
                         }
                     }
-                    if(exist && resultValue && resultValue.label == "function"){
+                    if(exist && resultValue && $this.isCallable(resultValue)){
                         // console.log('[Cursor__]',cursor,resultValue);
                         // console.log('[Call][2]',resultValue.name);
                         // console.log('[Next To]',cursor.char,'/',$this.code.substr($this.cursor.index,10));
@@ -3632,7 +3903,7 @@ $syl.parse = function(ressource,data){
          * la variable ressource contient des données importantes pour la lecture du code
          * comme par exemple le référencement du bloc de l'instruction parente
         */
-        ressource = this.set(ressource,{}),
+        ressource = this.set(ressource,{parent: null}),
         object = null,
         _end, statement = 0;
         // console.log('[Parse]', ressource);
@@ -3732,7 +4003,7 @@ $syl.parse = function(ressource,data){
                     return;
                 }
                 else if(/[\S]+/.test(cursor.word)){
-                    console.log('[Word]',cursor.word);
+                    // console.log('[Word]',cursor.word);
                 }
             }
             /**

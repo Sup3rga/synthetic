@@ -3,7 +3,7 @@ String nom = "bien"
 Array test = [nom == "Bien" ? 30 : 10 > 3 ? "bien" : "bad", 50]
 JSON<...> ok = { bien : "Ok" + " cool", "pardon" : 5 < 4 ? "Pardon !" : "OOh !",nom}
 
-print (test,ok)
+debug (test,ok)
 
 ok.bien = "cool !"
 
