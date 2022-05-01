@@ -1,0 +1,7 @@
+//Variable
+String nom = "bien le bonjour";
+JSON test = {
+    nom : "Ok"
+}
+
+print test

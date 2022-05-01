@@ -89,22 +89,31 @@
 //     print "Vous êtes donc majeur et vieux !"
 // }
 
-String test(e){
-    // print ("E", e)
-    return e
+test(String e){
+    return (){
+        print "Bonjour " + e
+    }
 }
 
-JSON<String,String> callbacks = {}
+prime = test "Eric !"
+second = test "Jacques"
+prime()
+second()
+// print test var
 
-callbacks.bien = test;
+// print var
+
+// JSON<String,String> callbacks = {}
+
+// callbacks.bien = test;
 
 // callbacks.hors "Bien !"s
 
 // print callbacks
 
-prime(callable unset String bien){
-    print "Cool !"
-    print bien "cool"
-}
+// prime(callable unset String bien, String test){
+//     print "Cool !"
+//     print bien test
+// }
 
-prime callbacks.bien
+// prime(callbacks.bien, "Ok !")

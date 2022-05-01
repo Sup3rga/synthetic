@@ -121,9 +121,10 @@ Synthetic.Class = function(){
         scope: -1,
         line: -1
     };
-    this.modules = {
-        '0,0': {}
-    };
+    this.modules = {};
+    this.currentScope = this.addr();
+    this.rootScope = this.currentScope;
+    this.currentObjectAddr = null;
     this.exportables = {};
     this.executing = true;
     this.tryMethodInstead = false;
@@ -150,6 +151,10 @@ Synthetic.Class = function(){
       const: false,
       override: false
     };
+    this.modules[this.currentScope] = {
+        parent: null,
+        modules: {}
+    }
     /**
     * On va définir les types de bases en étant des objects synthetic
     * si ce n'est pas encore fait
@@ -192,9 +197,11 @@ $syl.addr = function(){
     var r = '0x',
         max = Math.round(Math.random() * 10),
         hexa = ['a','b','c','d','e','f'];
-    for(var i = 0; i <= max; i++){
-        r += Math.round(Math.random() * 1) ? hexa[Math.floor(Math.random() * hexa.length)] : Math.round(Math.random() * 7) + 3;
-    }
+    do{
+        for(var i = 0; i <= max; i++){
+            r += Math.round(Math.random() * 1) ? hexa[Math.floor(Math.random() * hexa.length)] : Math.round(Math.random() * 7) + 3;
+        }
+    }while(Synthetic.Lang.definedAddr.indexOf(r) >= 0);
     Synthetic.Lang.definedAddr.push(r);
     return r;
 }
@@ -230,22 +237,29 @@ $syl.garbage = function(more){
     var addr = [],
         more = this.set(more, false);
     for(var i in this.modules){
-        if(null in this.modules[i]){
-            addr.push(this.modules[i][null].addr);
-            delete this.modules[i][null];
+        if(null in this.modules[i].modules){
+            addr.push(this.modules[i].modules[null].addr);
+            this.freeLinkOf(this.modules[i].modules[null]);
+            delete this.modules[i].modules[null];
         }
         /**
          * Si on en demande plus comme :
          *  * la suppression des variables non-existantes
          */
         if(more){
-            for(var j in this.modules[i]){
+            for(var j in this.modules[i].modules){
                 /**
                  * Les variables qui ont été comme non-existant doivent être supprimées !
                  */
-                if(this.modules[i][j].label == 'variable' && !('value' in this.modules[i][j]) ){
-                    addr.push(this.modules[i][j].addr);
-                    delete this.modules[i][j];
+                if(this.modules[i].modules[j].label == 'variable' && !('value' in this.modules[i].modules[j]) ){
+                    addr.push(this.modules[i].modules[j].addr);
+                    this.freeLinkOf(this.modules[i].modules[j]);
+                    delete this.modules[i].modules[j];
+                }
+                if(i != this.rootScope && this.modules[i].modules[j].linked == 0){
+                    console.log('[Delete]', j);
+                    // addr.push(this.modules[i].modules[j].addr);
+                    // delete this.modules[i].modules[j];
                 }
             }
         }
@@ -253,16 +267,6 @@ $syl.garbage = function(more){
     for(var i in addr){
         delete Synthetic.Lang.objects[addr[i]];
     }
-    //@DELETE
-
-    // for(var i in this.modules){
-    //     for(var j in this.modules[i]){
-    //         if(this.modules[i][j].name == null){
-    //             delete Synthetic.Lang.objects[this.modules[i][j].addr];
-    //             delete this.modules[i][j];
-    //         }
-    //     }
-    // }
 }
 /**
  * La méthode len permet de calculer la longueur d'un objet
@@ -354,7 +358,10 @@ $syl.meta = function(options,autosave){
         name: null, //le nom du notation: par exemple : nomVariable
         visible: this.access.export, //Le module sera visible ou pas
         origin: null,//this.realpath, //Le chemin absolu dans lequel se trouve le module
-        addr: this.addr()
+        addr: this.addr(),
+        linked: 0,
+        following: [],
+        parentScope: this.currentScope
     }, options),
     autosave = this.set(autosave,true);
     result.implicitType = result.implicitType == null ? result.type : result.implicitType;
@@ -2144,28 +2151,52 @@ $syl.save = function(objet,parent){
     if(!this.executing){
         return;
     }
-    if(parent != undefined){
-        parent = {
-            scope: parent.cursor.scope + 1,
-            index: parent.cursor.index
-        }
-    }
-    else{
-        parent = {
-            scope: objet.cursor.scope,
-            index: objet.cursor.index
-        }
-    }
-    var ref = this.previousCloserRef([parent.scope, parent.index], true);
-    // console.log('[REF]',ref, objet.name, objet.label, '/', parent.scope, parent.index);
-    if(!(ref in this.modules)){
-        this.modules[ref] = {};
-    }
-    this.modules[ref][objet.name] = objet;
+    // if(parent != undefined){
+    //     parent = {
+    //         scope: parent.cursor.scope + 1,
+    //         index: parent.cursor.index
+    //     }
+    // }
+    // else{
+    //     parent = {
+    //         scope: objet.cursor.scope,
+    //         index: objet.cursor.index
+    //     }
+    // }
+    // var ref = this.previousCloserRef([parent.scope, parent.index], true);
+    // // console.log('[REF]',ref, objet.name, objet.label, '/', parent.scope, parent.index);
+    // if(!(ref in this.modules)){
+    //     this.modules[ref] = {};
+    // }
+    // this.modules[ref][objet.name] = objet;
+    this.modules[this.currentScope].modules[objet.name] = objet;
     Synthetic.Lang.objects[objet.addr] = objet;
     // if(objet.visible){
     //     this.exportables[objet.name] = objet;
     // }
+}
+
+/**
+ * La méthode freeLinkOf permet de libérer les liens d'un objet vis-à-vis un autres
+ */
+$syl.freeLinkOf = function(object){
+    for(var i in object.following){
+        Synthetic.Lang.objects[object.following[i]].linked--;
+        Synthetic.Lang.objects[object.following[i]].linked = Synthetic.Lang.objects[object.following[i]].linked < 0 ? 0 : Synthetic.Lang.objects[object.following[i]].linked;
+    }
+    return this;
+}
+/**
+ * La méthode linkWith permet de lier deux objets Synthetic
+ */
+$syl.linkWith = function(depend){
+    var depend = typeof depend == 'object' ? depend :
+        Synthetic.Lang.objects[depend];
+    if(depend){
+        depend.linked++;
+        Synthetic.Lang.objects[this.currentObjetAddr].following.push(depend.addr);
+    }
+    return this;
 }
 /**
  * la méthode parent permet de retrouver l'étendue parente d'une instruction
@@ -2206,22 +2237,32 @@ $syl.previousCloserRef = function(cursor,notNull){
 /**
  * La méthode createBlock permet de créer virtuellement un block d'attachement d'objets
 */
-$syl.createBlock = function(ref){
+$syl.createBlock = function(autoReplace){
     if(!this.executing){
         return;
     }
-    // console.log('[block]',ref);
-    var cursor = ref.split(',');
-    var ref = cursor[0] + ',' + cursor[1];
-    if(this.blocks.indexOf(ref) < 0){
-        this.blocks.push(ref);
+    var scope = this.addr(),
+        autoReplace = this.set(autoReplace, true);
+    this.modules[scope] = {
+        parent: this.currentScope,
+        modules: {}
+    };
+    if(autoReplace){
+        this.currentScope = scope;
     }
-    return this;
+    // console.log('[block]',ref);
+    // var cursor = ref.split(',');
+    // var ref = cursor[0] + ',' + cursor[1];
+    // if(this.blocks.indexOf(ref) < 0){
+    //     this.blocks.push(ref);
+    // }
+    return scope;
 }
 /**
  * La méthode getCloserStruct permet de retrouver la structure (class, mixin, enum) la plus proche en parenté
  */
 $syl.getCloserStruct = function(cursor, labels){
+    return null;
     var previous = this.previousCloserRef(cursor,true),
         labels = Array.isArray(labels) ? labels : Synthetic.Lang.typeCreatorKeys,
         object, r = null, list = {}, indexes = [];
@@ -2324,37 +2365,52 @@ $syl.find = function(name){
         },false);
     }
     else{
-        var $this = this;
-        var scope = $this.previousCloserRef([$this.cursor.scope, $this.cursor.index],true),
+        var $this = this,
+            scope = this.currentScope,
             r = null;
+        while(!r){
+            if(name in this.modules[scope].modules){
+                r = this.modules[scope].modules[name];
+            }
+            else{
+                if(this.modules[scope].parent != null){
+                    scope = this.modules[scope].parent;
+                }
+                else{
+                    break;
+                }
+            }
+        }
+        // var scope = $this.previousCloserRef([$this.cursor.scope, $this.cursor.index],true),
+        //     r = null;
         // console.log('[Name]',name,'::', [$this.cursor.scope, $this.cursor.index], scope, this.blocks);
         // if(name == 'tk'){
         //     console.log('[Mod]',this.modules);
         // }
-        while(scope != null && r == null){
-            if(name == 'root'){
-                if(scope == "0,0"){
-                break;
-                }
-                scope = '0,0';
-            }
-            else if(name == 'upper'){
-                if(scope == "0,0"){
-                    break;
-                }
-                scope = $this.previousCloserRef(scope.split(','),true);
-            }
-            else{
-                if($this.modules[scope] && name in $this.modules[scope]){
-                    r = $this.modules[scope][name];
-                    break;
-                }
-                if(scope == "0,0"){
-                    break;
-                }
-                scope = $this.previousCloserRef(scope.split(','),true);
-            }
-        }
+        // while(scope != null && r == null){
+        //     if(name == 'root'){
+        //         if(scope == "0,0"){
+        //         break;
+        //         }
+        //         scope = '0,0';
+        //     }
+        //     else if(name == 'upper'){
+        //         if(scope == "0,0"){
+        //             break;
+        //         }
+        //         scope = $this.previousCloserRef(scope.split(','),true);
+        //     }
+        //     else{
+        //         if($this.modules[scope] && name in $this.modules[scope]){
+        //             r = $this.modules[scope][name];
+        //             break;
+        //         }
+        //         if(scope == "0,0"){
+        //             break;
+        //         }
+        //         scope = $this.previousCloserRef(scope.split(','),true);
+        //     }
+        // }
     }
     // console.log('[Return]',r, this.modules);
     return r;
@@ -2748,10 +2804,10 @@ $syl.native = function(serial,args,ressources){
  * La méthode caller
  */
 $syl.caller = function(callable,ressources){
-    var $this = this, cursor;
-    if(callable.ref in this.modules){
-        delete this.modules[callable.ref];
-    }
+    var $this = this, cursor, instance;
+    // if(callable.ref in this.modules){
+    //     delete this.modules[callable.ref];
+    // }
     return new Promise(function(res){
         $this.toNextChar().then(function(_char){
             // console.log('[code]',$this.code.substr($this.cursor.index, 10));
@@ -2802,6 +2858,10 @@ $syl.caller = function(callable,ressources){
                         // console.log('[CALL][PARSING]', callable.name, cursor.lines);
                         $this.cursor = $this.copy(callable.scopeCursor);
                         // $this.cursor.index++;
+                        // if('paralex' in callable){
+                        //     console.log('[Parallex]', callable.name, callable.paralex);
+                        // }
+                        // instance = 'paralex' in callable && callable.paralex ? callable.paralex : $this;
                         $this.parse({
                             parent : callable.addr
                         },{
@@ -2831,7 +2891,7 @@ $syl.caller = function(callable,ressources){
                                 $this.cursor = $this.copy(cursor);
                                 res(response);
                             // }
-                        })
+                        });
                     }
                 }
             })
@@ -3044,13 +3104,6 @@ $syl.arguments = function(serial,ressources, calling){
                         ressources: ressources,
                         end: [Synthetic.Lang.constants._EOS.COMA, Synthetic.Lang.constants._EOS.PARENTHESE]
                     }).then(function(result){
-                        /**
-                         * On doit déléguer les type si c'est une fonction
-                         */
-                        // if(result && result.label == 'function'){
-                        //     result.type = arg.type;
-                        //     result.implicitType = arg.implicitType;
-                        // }
                         /**
                          * S'il y a contraint 'callable' de label sur l'argument
                          * pn verifie qu'il reçoit bien un callable ('external', 'function')
@@ -3312,7 +3365,32 @@ $syl.arguments = function(serial,ressources, calling){
         });
     });
 }
-
+/**
+ * La méthode paralex permet d'éxecution une fonction dans un environnement propre à elle même
+ */
+$syl.paralex = function(callable){
+    var $this = this;
+    return new Promise(function(res){
+        var parallele = new Synthetic.Class();
+        for(var i in $this){
+            if(typeof $this[i] != 'function'){
+                parallele[i] = $this[i];
+            }
+        }
+        parallele.parse({
+            parent : callable.addr
+        },{
+            end: callable.braced ? [Synthetic.Lang.constants._EOS.BRACE] : [],
+            statementCount: callable.braced ? -1 : 1
+        }).then(function(response){
+            if($this.isCallable(response)){
+                // response.paralex = parallele;
+            }
+            // console.log('[Response]',response);
+            res(response);
+        });
+    });
+}
 /***
  * La méthode method permet la sérialization d'une fonction ou d'une méthode
  */
@@ -3481,6 +3559,7 @@ $syl.litteral = function(litteral,ressources,ref){
         ref = this.set(ref,false),
         type = this.getType(),
         syntObject = $this.find(litteral),
+        _currentObjetAddr = this.currentObjectAddr,
         redefinition = this.currentType != null,
         exist = !redefinition && syntObject != null && !$this.access.override,
         settingKey = null, settingKeyObject = null,
@@ -3597,6 +3676,10 @@ $syl.litteral = function(litteral,ressources,ref){
                         return;
                     }
                     $this.goTo(1);
+                    $this.currentObjectAddr = exist ? resultValue.addr : serial.addr;
+                    if(cursor.char == '=' && exist){
+                        $this.freeLinkOf(resultValue);
+                    }
                     // console.log('[Serial]',litteral,settingKey, exist);
                     if(settingKey){
                         settingKey = $this.meta({
@@ -3604,8 +3687,8 @@ $syl.litteral = function(litteral,ressources,ref){
                             constraints: serial.constraints,
                             visible: false
                         });
+                        $this.currentObjetAddr = settingKey.addr;
                     } 
-
                     if(exist && cursor.char == '=' && resultValue && ( resultValue.constant || resultValue.final ) ){
                         throw new Error($this.err("cannot override [ "+litteral+" ] declared previously as "+(resultValue.constant ? 'constant' : 'final')+" !"));
                     }
@@ -3642,6 +3725,7 @@ $syl.litteral = function(litteral,ressources,ref){
                                     throw new Error($this.err("too much return value types !"));
                                 }
                                 settingKeyObject.value[settingKey.name] = $this.extend(settingKey, $this.copy(result));
+                                // $this.linkWith(result);
                                 if(serial.constraints){
                                     /**
                                      * Si le resulta est un external, on vérifier qu'il n'y a acceptation que
@@ -3674,6 +3758,7 @@ $syl.litteral = function(litteral,ressources,ref){
                                     name : resultValue.visible,
                                     visible : resultValue.visible
                                 };
+                                // $this.linkWith(result);
                                 $this.extend(resultValue, result,true);
                                 resultValue.name = tmp.name;
                                 resultValue.visible = tmp.visible;
@@ -3854,6 +3939,7 @@ $syl.litteral = function(litteral,ressources,ref){
                         $this.caller(resultValue,ressources).then(function(result){
                             // console.log('[Call][end]',litteral, resultValue.name)//,'/',(result ? result.name : null), $this.code.substr($this.cursor.index, 10));
                             resultValue = result;
+                            $this.linkWith(resultValue);
                             loop.end();
                         });
                         return;
@@ -4043,6 +4129,7 @@ $syl.compile = function(filename){
     return new Promise(function(resolve, reject){
         $this.read(filename).then(function(){
             $this.parse().then(function(){
+                console.log('[Modules]',$this.modules);
                 resolve($this);
             }).catch(function(e){
                 reject(e);
