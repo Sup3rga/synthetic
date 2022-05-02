@@ -1,7 +1,30 @@
 //Variable
 String nom = "bien le bonjour";
-JSON test = {
-    nom : "Ok"
+// JSON test = {
+//     nom : "Ok"
+// }
+
+// print test
+
+//Functions
+// prime(String nom){
+//     print "Je suis " + nom
+//     return (){
+//         print "Je m'appelle " + nom
+//     }
+// }
+
+// cb1 = prime "Super !"
+// cb2 = prime "Master !"
+// print "======================="
+// cb1()
+// cb2()
+recursive(Number occurence : 0){
+    if occurence < 3 {
+        // print "[cool]"
+        recursive(occurence + 1)
+    }
+    print "[Occurence] " + occurence
 }
 
-print test
+recursive();

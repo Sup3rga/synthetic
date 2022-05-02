@@ -89,16 +89,27 @@
 //     print "Vous êtes donc majeur et vieux !"
 // }
 
-test(String e){
-    return (){
-        print "Bonjour " + e
-    }
-}
+// String test(String e){
+//     return (){
+//         print "Bonjour " + e
+//         JSON<...> test = {
+//             ok : "word",
+//             cool: {
+//                 bien : callable(){
+//                     return "Bien"
+//                 }
+//             }
+//         };
+//         // print test;
+//         return "bien"
+//     }
+// }
 
-prime = test "Eric !"
-second = test "Jacques"
-prime()
-second()
+// prime = test "Eric !" ()
+// second = test "Jacques" ()
+// print ("[PRIME]", prime)
+// prime()
+// second()
 // print test var
 
 // print var
@@ -107,11 +118,9 @@ second()
 
 // callbacks.bien = test;
 
-// callbacks.hors "Bien !"s
-
 // print callbacks
 
-// prime(callable unset String bien, String test){
+// String prime(callable unset String bien, String test){
 //     print "Cool !"
 //     print bien test
 // }

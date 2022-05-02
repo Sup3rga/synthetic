@@ -3,10 +3,18 @@ String nom = "bien"
 Array test = [nom == "Bien" ? 30 : 10 > 3 ? "bien" : "bad", 50]
 JSON<...> ok = { bien : "Ok" + " cool", "pardon" : 5 < 4 ? "Pardon !" : "OOh !",nom}
 
-debug (test,ok)
+// debug {test,ok}
 
-ok.bien = "cool !"
+ok.bien = "cool "
 
+ok.ok = maj "yeah !"
+
+// other = ok
+
+// other.okay = "bien"
+
+print ok
+// print other
 // JSON ok = {
 //     bien : "Pas mal !",
 //     fn : (nom){
