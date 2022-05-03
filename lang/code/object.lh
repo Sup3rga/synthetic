@@ -9,11 +9,15 @@ ok.bien = "cool "
 
 ok.ok = maj "yeah !"
 
-// other = ok
+other = ok
 
-// other.okay = "bien"
+other.test = (nom){
+    debug "Hello " + nom
+}
+// other.ok = "bien"
 
 print ok
+other.test "Synthetic"
 // print other
 // JSON ok = {
 //     bien : "Pas mal !",

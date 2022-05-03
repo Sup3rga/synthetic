@@ -1,0 +1,6 @@
+try{
+    raise "Bonjour !"
+}
+catch(e){
+    print "[ERROR] " + e
+}

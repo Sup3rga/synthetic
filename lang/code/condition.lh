@@ -1,3 +1,19 @@
-object = "bien"
+object = "biens"
 
-if object!="bien"{print "Hello !"}else{print "World !"}
+if object!="bien"{
+    print "Hello !"
+}else{
+    print "World !"
+}
+
+switch object {
+    case "bien":
+        print "Bonjour"
+    break
+    case "mauvais"|"bien":
+        print "Bonsoir !"
+    break;
+    default:
+        print "Rien à *** !"
+    break;
+}
