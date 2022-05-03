@@ -6,22 +6,22 @@ test = {
 
 // print test
 
-// loop test {
-//     /**
-//       i : value
-//       j : key,
-//       k : occurence
-//     */
-//     print "Bonjour ! " + j + " => " + i + " : " + k
-//     if k == 0 {
-//         continue
-//     }
-//     elif k == 1{
-//         break
-//     }
-//     // continue
-//     print "cool"
-// }
+loop test {
+    /**
+      i : value
+      j : key,
+      k : occurence
+    */
+    print "Bonjour ! " + j + " => " + i + " : " + k
+    if k == 0 {
+        continue
+    }
+    elif k == 1{
+        break
+    }
+    // continue
+    print "cool"
+}
 Number k = 0
 while k < 5 {
     print "[K] " + k
