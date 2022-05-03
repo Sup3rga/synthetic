@@ -1,0 +1,35 @@
+test = {
+    index1 : "Bien",
+    cool: "assez",
+    bien : "fini"
+}
+
+// print test
+
+// loop test {
+//     /**
+//       i : value
+//       j : key,
+//       k : occurence
+//     */
+//     print "Bonjour ! " + j + " => " + i + " : " + k
+//     if k == 0 {
+//         continue
+//     }
+//     elif k == 1{
+//         break
+//     }
+//     // continue
+//     print "cool"
+// }
+Number k = 0
+while k < 5 {
+    print "[K] " + k
+    if k == 2 {
+        k += 2
+        continue
+    }
+    k ++
+}
+
+print "La boucle est fini !"
