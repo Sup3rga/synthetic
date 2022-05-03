@@ -1,6 +1,6 @@
 try{
-    raise "Bonjour !"
+    raise "Ben"
 }
-catch(e){
+catch e {
     print "[ERROR] " + e
 }

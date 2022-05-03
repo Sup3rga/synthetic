@@ -4882,6 +4882,9 @@ $syl.try = function(ressources,except){
         blocked,
         _scopeKey = [$this.saveScope(true),$this.saveScope()];
     return new Promise(function(res){
+        if(except && (!_tryingBlock || !_tryingBlock.reachCatch)){
+            $this.exception($this.err("syntax error ! catch statement without previous try statement !"),true);
+        }
         function parse(_char){
             if(_char != '{'){
                 $this.exception($this.err("[ { ] expected for try block beginning !"),true);
