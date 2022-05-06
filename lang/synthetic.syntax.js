@@ -1,3 +1,4 @@
+const { type } = require('os');
 
 /**
  * @auteur: Superga
@@ -1130,6 +1131,24 @@
      }
      return r;
  }
+
+ $syl.isSuitable = function(referal,object){
+     var r = object.type == referal.type ||
+             object.type == referal.implicitType ||
+             object.implicitType == referal.type ||
+             object.implicitType == referal.implicitType;
+    if(referal.constraints && !object.constraints){
+        r = false;
+    }
+    else{
+        for(var i in referal.constraints.type){
+            for(var j in object.constraints.type){
+                
+            }
+        }
+    }
+    return r;
+ }
  /**
   * La méthode toStringTypes est une méthode extra, permettant de mettre sous forme
   * de chaine de caractères une liste d'objet de type
@@ -1716,7 +1735,7 @@
                   * Si le mot est un litteral, on cherche sa valeur
                   */
                  _type = $this.getCodeType(cursor.word);
-                 // console.log('[Val][Word]',cursor.word,'/'+$this.code.substr($this.cursor.index,10)+'<', $this.executing);
+                //  console.log('[Val][Word]',cursor.word,'/'+$this.code.substr($this.cursor.index,10)+'<', $this.executing);
                  if(_type == Synthetic.Lang.constants.LITTERAL){
                      loop.stop();
                      // if(['--','++'].indexOf(cursor.char) >= 0){
@@ -1958,12 +1977,32 @@
                  values.length && !waitingForNextOperand &&
                  Synthetic.Lang.signs.indexOf(cursor.char) < 0
              ){
-                 if(data.end.indexOf(_end) < 0 && Synthetic.Lang.blockEOS.indexOf(cursor.char) < 0 && _end != constants.SEMICOLON && /[\S]+/.test(cursor.char)){
-                     $this.backTo(1);
+                //  console.log('[END]',_end,cursor.char, cursor.word,'/', );
+                /**
+                 * Si on rencontre le mot-clé in
+                 * on vérifie le booléen
+                 */
+                 if($this.code.substr($this.cursor.index, 2) == 'in'){
+                    if(!values.length || typeof values[values.length - 1] != 'object'){
+                        $this.exception($this.err("syntax error near by ... in ... operator !"),true);
+                    }
+                    $this.goTo(2);
+                    loop.stop();
+                    $this.in({
+                        key: values[values.length - 1],
+                        ressources: data.ressources
+                    }).then(function(result){
+                        values[values.length - 1] = result;
+                        loop.start();
+                    });
                  }
-                 // console.log('[END]',_end,cursor.char, cursor.word,'/', Synthetic.Lang.blockEOS.indexOf(cursor.char));
-                 // console.log('[--.',$this.code.substr($this.cursor.index, 5), data.end);
-                 loop.end();
+                 else{
+                    if(data.end.indexOf(_end) < 0 && Synthetic.Lang.blockEOS.indexOf(cursor.char) < 0 && _end != constants.SEMICOLON && /[\S]+/.test(cursor.char)){
+                        $this.backTo(1);
+                    }
+                    // console.log('[--.',$this.code.substr($this.cursor.index, 5), data.end);
+                    loop.end();
+                }
                  return;
              }
              if(defernow){
@@ -2152,9 +2191,10 @@
  /**
   * la méthode err permet d'avoir un affichage basic d'un code d'erreur
  */
- $syl.err = function(message){
-     var r = this.cursorOrigin(this.cursor.index);
-     return "ERROR at file "+this.file+" line " + r.y + "::"+r.x+" -> " +this.set(message,'');
+ $syl.err = function(message,exception){
+     var r = this.cursorOrigin(this.cursor.index),
+        exception = this.set(exception,false);
+     return (exception ? "Exception raised" : "ERROR")+" at file "+this.file+" line " + r.y + "::"+r.x+" -> " +this.set(message,'');
  }
  /**
   * La méthode exception permet de lever une exception en tout sécurité
@@ -2999,7 +3039,7 @@
                  return $this.toVariableStructure($this.toBoolean(args[0].value));
              },
              raise: function(){
-                 $this.exception(args[0].value);
+                 $this.exception($this.err(args[0].value,true));
              },
              //!TODO : To be implemented
              plaform: function(){
@@ -3816,6 +3856,7 @@
          _scopeKey = [this.saveScope(true)],
          _currentObjetAddr = this.currentObjectAddr,
          redefinition = this.currentType != null,
+         forInArgSearching = $this.currentLoop && $this.currentLoop.type == 'forin' && !$this.currentLoop.argset,
          exist = !redefinition && syntObject != null && !$this.access.override,
          settingKey = null, settingKeyObject = null,
          created = false, dotted = false, nextWord = '',
@@ -3828,9 +3869,10 @@
              name: litteral, //le nom du notation: par exemple : nomVariable
              visible: this.access.export,
              parent: this.set(ressources.parent,null)
-         }),
+         }, !forInArgSearching),
          resultValue = exist ? syntObject : null, called = false,
          _cursor;
+         exist = !forInArgSearching && exist;
         //  console.log('[search for]', litteral, exist, $this.executing);
          // console.log('[Result]', resultValue, litteral);
          if(!exist ){
@@ -3838,6 +3880,9 @@
          }
          else{
              // console.log('[Litt]',litteral, $this.modules);
+         }
+         if(forInArgSearching && serial.label == 'variable'){
+             $this.currentLoop.args.push(serial);
          }
          // console.log('[Type]',litteral,redefinition,exist, [$this.cursor.scope, $this.cursor.index]);
          // console.trace('[Serial]',litteral,exist,serial);
@@ -3933,6 +3978,13 @@
                  }
                  //Si on a un opérateur d'affectation ou de cummulation, on passe à une affectation
                  if(['=','+=','-=','/=','*=','~=', '--', '++'].indexOf(cursor.char) >= 0){
+                     /**
+                      * Si on recherche des arguments pour la boucle for ... in
+                      * on empêche une affectation
+                      */
+                     if(forInArgSearching){
+                         $this.exception($this.err("syntax error withing for ... in statement"),true);
+                     }
                      if(ref){
                          loop.end();
                          return;
@@ -4170,6 +4222,13 @@
                   * à la suivante.
                   */
                  else if(cursor.char == '[' && $this.executing && (!resultValue || resultValue.label != 'function') ){
+                    /**
+                     * Si on recherche des arguments pour la boucle for ... in
+                     * on empêche une affectation
+                     */
+                    if(forInArgSearching){
+                        $this.exception($this.err("syntax error withing for ... in statement"),true);
+                    }
                      if(!exist && resultValue == null){
                          $this.exception($this.err("[ "+cursor.char+" ] unexpected !"),true);
                      }
@@ -4238,7 +4297,35 @@
                      $this.cursor.index++;
                      loop.start();
                  }
+                 /**
+                  * Si on rencontrer un ',' ou un ';' on procède ainsi
+                  */
+                 else if([',',';'].indexOf(cursor.char) >= 0){
+                    /**
+                     * Si on recherche des arguments pour la boucle for ... in
+                     * on empêche une affectation
+                     */
+                    if(forInArgSearching && cursor.char == ';'){
+                        $this.exception($this.err("syntax error withing for ... in statement"),true);
+                    }
+                    if(!exist){
+                        serial.value = 'value' in serial ? serial.value : null;
+                        if(cursor.char == ','){
+                            $this.currentType = type;
+                        }
+                        $this.goTo(1);
+                    }
+                    loop.end();
+                 }
                  else{
+                    /**
+                     * Si on recherche des arguments pour la boucle for ... in
+                     * on empêche une affectation
+                     */
+                    if(forInArgSearching){
+                        loop.end();
+                        return;
+                    }
                      if(ref){
                          // console.log('[Litt][ref]',litteral);
                          loop.end();
@@ -4305,6 +4392,7 @@
                  }
              });
          }).then(function(){
+            //  console.log('[Modules]',$this.modules);
              $this.restoreObjectAddr(key);
              // $this.currentObjectAddr = _currentObjetAddr;
              // console.log('[Litteral][Result]', litteral, '/', $this.code.substr($this.cursor.index, 10));
@@ -4396,6 +4484,16 @@
                          if($this.tryingBlock && $this.tryingBlock.reachCatch && ['catch'].indexOf(cursor.word) < 0){
                              $this.exception($this.err("[ " + cursor.word + " ] unexpected !"),true);
                          }
+                         /**
+                          * Si on a une boucle for ... in et qu'on définit ses arguments
+                          */
+                        if($this.currentLoop && $this.currentLoop.type == 'forin' && !$this.currentLoop.argset && cursor.word == 'in'){
+                            if($this.currentLoop.args.length == 0){
+                                $this.exception($this.err("No iteration variable was defined for the for ... in loop !"),true);
+                            }
+                            loop.end();
+                            return;
+                        }
                          $this[cursor.word](ressource).then(function(result){
                              if(Synthetic.Lang.valuableReservedKeys.indexOf(cursor.word) >= 0){
                                  object = result;
@@ -4523,8 +4621,8 @@
                  loop.end();
                  return;
              }
-             else if(cursor.char != '<' && !cursor.word && /[\S]+/.test(cursor.char)){
-                 // console.log('[Char][parse]',cursor.char);
+             else if(['<', ' ', '\n'].indexOf(cursor.char) < 0 && Synthetic.Lang.blockEOS.indexOf(cursor.char) < 0 && $this.getCodeType(cursor.char) != Synthetic.Lang.constants.LITTERAL){
+                 console.log('[Char][parse]',cursor.char);
              }
              /**
               * on suggère qu'il y a un type prise en compte pour voir s'il y a généricité
@@ -4623,7 +4721,32 @@
          // });
      });
  }
- 
+/**
+ * La méthode in permet de gérer l'opérateur in pour vérifier si un
+ */
+ $syl.in = function(data){
+    var data = this.set(data,{
+        key: null,
+        ressources: {parent : null}
+    }),
+    $this = this;
+    return new Promise(function(res){
+        if($this.executing && data.key == null){
+            $this.exception($this.err("syntax error near by ... in ... operator"),true);
+        }
+        // console.log('[IN]',$this.code.substr($this.cursor.index, 10),data);
+        var cursor = $this.copy($this.cursor), r = false;
+        $this.value({
+            object: $this.meta({type: 'Any'}, false),
+            ressources: data.ressources,
+        }).then(function(object){
+            if($this.executing){
+                r = $this.containsKey(data.key.value, object);
+            }
+            res($this.toVariableStructure(r));
+        });
+    });
+ }
  /**
   * La méthode if permet d'executer un bloc if
   */
@@ -5189,7 +5312,9 @@
                              $this.cursor = $this.copy(_cursor);
                              $this.currentLoop = {
                                  broken: false,
-                                 continued: false
+                                 continued: false,
+                                 type: 'loop',
+                                 args: []
                              };
                              $this.meta({
                                  type: value.type,
@@ -5285,7 +5410,9 @@
                  $this.cursor = $this.copy(_cursor);
                  $this.currentLoop = {
                      broken: false,
-                     continued: false
+                     continued: false,
+                     type: 'while',
+                     args: []
                  };
                  $this.value({
                      ressources: ressources,
@@ -5346,4 +5473,99 @@
              until();
          });
      });
+ }
+
+ $syl.for = function(ressources){
+    var $this = this,
+        _executing = $this.executing,
+        _scopeKey = [$this.saveScope(),$this.saveScope(true)],
+        _currentLoop = $this.currentLoop,
+        types = {FORIN: 1, CLASSIC: 0},
+        _cursor, loopType = types.CLASSIC, start = false,
+        args= {points: [0,0,0], index: 0};
+    return new Promise(function(res){
+        _cursor = $this.copy($this.cursor);
+        var parentheseless, begin;
+        $this.runner(function(cursor,loop){
+            if(/[\S]+/.test(cursor.char) && !start){
+                parentheseless = cursor.char != '(';
+                args.points[args.index] = $this.cursor.index + (!parentheseless ? 1 : 0);
+                _cursor = $this.copy($this.cursor);
+                start = true;
+                return;
+            }
+            if(start){
+                if(cursor.char == ';'){
+                    if(loopType == types.FORIN){
+                        $this.exception($this.err("syntax error !"),true);
+                    }
+                    args.index++;
+                    /**
+                     * On ne prend que 3 paramètres
+                     */
+                    if(args.index < 3){
+                        args.points[args.index] = $this.cursor.index + 1;
+                    }
+                    else{
+                        loop.end();
+                    }
+                }
+                if(cursor.word == 'in' && args.index == 0){
+                    loopType = types.FORIN;
+                    loop.end();
+                }
+            }
+        }).then(function(){
+            console.log('[FOR]',args, loopType, $this.code.substr($this.cursor.index, 10));
+            $this.cursor = $this.copy(_cursor);
+            if(loopType == types.FORIN){
+                $this.currentLoop = {
+                    broken: false,
+                    continued: false,
+                    type: 'forin',
+                    args: [],
+                    argset: false,
+                };
+                /**
+                 * Récupération des arguments d'itération
+                 */
+                $this.parse(ressources).then(function(){
+                    /**
+                     * Récupération de la variable à parcourir
+                     */
+                    _cursor = $this.copy($this.cursor);
+                    $this.value({
+                        object: $this.meta({type: 'Any'}, false),
+                        ressources: ressources,
+                        end: [Synthetic.Lang.constants._EOS[parentheseless ? 'BRACE' : 'PARENTHESE']]
+                    }).then(function(value){
+                        // console.log('[Val]',value);
+                        if($this.executing){
+                            if(['Array','JSON'].indexOf(value.type) < 0 && ['Array','JSON'].indexOf(value.implicitType) < 0){
+                                $this.cursor = $this.copy(_cursor);
+                                $this.exception($this.err("Array or JSON value expected, " + value.implicitType+" given !"));
+                            }
+                        }
+                        else{
+                            value = {value: {}};
+                        }
+                        $this.currentLoop.argset = true;
+                        $this.createBlock();
+                        $this.wait(value.value, function(value,index,count,remain,next,end){
+                            var list = [value,index];
+                            for(var i in $this.currentLoop.args){
+                                if(i < list.length){
+                                    
+                                }
+                            }
+                            console.log({value,index,count})
+                        });
+                    });
+                });
+            }
+            else{
+
+            }
+        });
+    });
  }

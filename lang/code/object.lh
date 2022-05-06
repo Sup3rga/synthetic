@@ -1,8 +1,10 @@
 // String nom = "bien"
+String bien;
 
 // Array test = [nom == "Bien" ? 30 : 10 > 3 ? "bien" : "bad", 50]
 // JSON<...> ok = { bien : "Ok" + " cool", "pardon" : 5 < 4 ? "Pardon !" : "OOh !",nom}
 
+// print 'bien' in ok
 // // debug {test,ok}
 
 // ok.bien = "cool "
@@ -18,13 +20,13 @@
 
 // print ok
 // other.test "Synthetic"
-Number k = 0
+// Number k = 0
 
-print {k}
+// print {k}
 
-ok = k++
+// ok = k++
 
-print {k,ok}
+// print {k,ok}
 // print other
 // JSON ok = {
 //     bien : "Pas mal !",

@@ -2,7 +2,7 @@ object = "biens"
 
 if object!="bien"{
     print "Hello !"
-}else{
+}elif object == "bien" {
     print "World !"
 }
 
