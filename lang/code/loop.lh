@@ -1,9 +1,9 @@
-test = {
-    index1 : "Bien",
-    cool: "assez",
-    bien : "fini"
-}
-
+// test = {
+//     index1 : "Bien",
+//     cool: "assez",
+//     bien : "fini"
+// }
+// test = {}
 // print test
 
 // loop (test) {
@@ -22,14 +22,14 @@ test = {
 //     // continue
 //     print "cool"
 // }
-// Number k = 0
+Number k = 0
 // while k < 5 {
 //     print "[K] " + k
-//     try{
-//         raise "Cool !"
-//     }catch(e){
+//     // try{
+//     //     raise "Cool !"
+//     // }catch(e){
 
-//     }
+//     // }
 //     if k == 2 {
 //         k += 2
 //         continue
@@ -37,7 +37,8 @@ test = {
 //     ++ k
 // }
 
-for (Number i in test) {
+
+for (Number i = 0; i < 5; i++){
     print i
 }
 

@@ -1,3 +1,4 @@
+const { exec } = require('child_process');
 const { type } = require('os');
 
 /**
@@ -85,6 +86,12 @@ const { type } = require('os');
              SEMICOLON: 4,
              ELSE: 5,
              OR: 6
+         },
+         LOOP: {
+             LOOP: 0,
+             WHILE: 1,
+             FORIN: 2,
+             FOR: 3
          }
      },
      typeFromConstants: {
@@ -626,12 +633,13 @@ const { type } = require('os');
      for(var i in list){
          indexes.push(i);
      }
+     function end(){
+        k = indexes.length;
+        until();
+     }
      function until(){
-         if(k < indexes.length){
-             callback(list[indexes[k]], indexes[k], k, indexes.length - k, until, function(){
-                 k = indexes.length;
-                 until();
-             });
+         if(k < indexes.length && k >= 0){
+             callback(list[indexes[k]], indexes[k], k, indexes.length - k, until, end);
          }
          else{
              return;
@@ -1132,21 +1140,41 @@ const { type } = require('os');
      return r;
  }
 
+ /**
+  * La méthode suitable permet de comparer si deux variable sont compatible en type
+  * et en contrainte de type
+  */
  $syl.isSuitable = function(referal,object){
      var r = object.type == referal.type ||
              object.type == referal.implicitType ||
              object.implicitType == referal.type ||
-             object.implicitType == referal.implicitType;
-    if(referal.constraints && !object.constraints){
+             object.implicitType == referal.implicitType ||
+             object.type == 'Any' || object.implicitType == 'Any';
+    if(r){
+        r = (!referal.constraints == null && object.constraints != null && !object.constraints.recursive) 
+            ||
+            (referal.constraints != null && referal.constraints.recursive)
+            ||
+            (referal.constraints == null && object.constraints == null)
+    }
+    if(referal.constraints != null && object.constraints == null){
         r = false;
     }
-    else{
-        for(var i in referal.constraints.type){
-            for(var j in object.constraints.type){
-                
+    else if(r && referal.constraints != null && object.constraints != null){
+        var keys = ['key', 'value'];
+        for(var j in object.constraints[keys[k]]){
+            for(var i in referal.constraints[keys[k]]){
+                r = object.constraints[keys[k]][j].type == referal.constraints[keys[k]][i].type || referal.constraints[keys[k]][i] == 'Any';
+                if(r){
+                    break;
+                }
+            }
+            if(!r){
+                break;
             }
         }
     }
+    // console.log('[R]',r);
     return r;
  }
  /**
@@ -3855,8 +3883,8 @@ const { type } = require('os');
          key = [this.saveObjectAddr()],
          _scopeKey = [this.saveScope(true)],
          _currentObjetAddr = this.currentObjectAddr,
-         redefinition = this.currentType != null,
          forInArgSearching = $this.currentLoop && $this.currentLoop.type == 'forin' && !$this.currentLoop.argset,
+         redefinition = this.currentType != null && !forInArgSearching,
          exist = !redefinition && syntObject != null && !$this.access.override,
          settingKey = null, settingKeyObject = null,
          created = false, dotted = false, nextWord = '',
@@ -3873,7 +3901,7 @@ const { type } = require('os');
          resultValue = exist ? syntObject : null, called = false,
          _cursor;
          exist = !forInArgSearching && exist;
-        //  console.log('[search for]', litteral, exist, $this.executing);
+        //  console.log('[search for]', litteral, exist, $this.executing, syntObject);
          // console.log('[Result]', resultValue, litteral);
          if(!exist ){
              // console.log('[Modules]',litteral,$this.modules);
@@ -3881,7 +3909,7 @@ const { type } = require('os');
          else{
              // console.log('[Litt]',litteral, $this.modules);
          }
-         if(forInArgSearching && serial.label == 'variable'){
+         if(forInArgSearching && serial.label == 'variable' && $this.types.indexOf(serial.name) < 0){
              $this.currentLoop.args.push(serial);
          }
          // console.log('[Type]',litteral,redefinition,exist, [$this.cursor.scope, $this.cursor.index]);
@@ -3890,7 +3918,13 @@ const { type } = require('os');
          // console.log('[Ok]');
      return new Promise(function(res){
          if(syntObject != null && syntObject.label == 'type' && assignType != null){
-             $this.exception($this.err("syntax error : "+assignType.type+" ... "+syntObject.name),true);
+             if(!$this.currentLoop || $this.currentLoop.type != 'forin' || $this.currentLoop.argset){
+                $this.exception($this.err("syntax error : "+assignType.type+" ... "+syntObject.name),true);
+             }
+             else{
+                 $this.currentType = null;
+                 assignType = null;
+             }
          }
          if(redefinition && exist && (resultValue.constant || resultValue.final) ) {
              $this.exception($this.err("cannot override [ "+litteral+" ] declared previously as "+(resultValue.constant ? 'constant' : 'final')+" !"));
@@ -3994,7 +4028,7 @@ const { type } = require('os');
                       * Si l'objet n'existe pas et que c'est n'est pas une création d'objet
                       * on lève une exception
                       */
-                     if(!exist && cursor.char != '='){
+                     if(!exist && cursor.char != '=' && $this.executing){
                          $this.exception($this.err("cannot modified undefined object [ "+(settingKey ? settingKey : litteral)+" ] value"));
                      }
                      if(!exist || resultValue || !settingKey){
@@ -4049,6 +4083,13 @@ const { type } = require('os');
                              $this.extend(resultValue, $this.calc([resultValue, cursor.char == '++' ? '+=' : '-=', $this.meta({type: 'Number', label: 'variable', value: 1})]),true);
                              // $this.linkWith(result,resultValue);
                              $this.extend(resultValue, tmp,true);
+                         }
+                         /**
+                          * Si le caractère actuel n'est pas un caractère blanc, on fait
+                          * marche arrière
+                          */
+                         if(cursor.char.length && /[\S]+/.test(cursor.char)){
+                             $this.backTo(cursor.char.length - (cursor.char.length == 1 ? 1 : 0));
                          }
                          loop.end();
                      }
@@ -4322,6 +4363,7 @@ const { type } = require('os');
                      * Si on recherche des arguments pour la boucle for ... in
                      * on empêche une affectation
                      */
+                    //  console.log('___[Litteral]',litteral, cursor.char);
                     if(forInArgSearching){
                         loop.end();
                         return;
@@ -4349,7 +4391,7 @@ const { type } = require('os');
                      if(exist && resultValue && $this.isCallable(resultValue)){
                          if(called){
                              if(cursor.char.length && /[\S]+/.test(cursor.char)){
-                                 // console.log('[Char]',cursor.char, _char);
+                                //  console.log('[Char]',cursor.char, _char);
                                  $this.backTo(cursor.char.length - (cursor.char.length == 1 ? 1 : 0));
                              }
                              loop.end();
@@ -4380,7 +4422,7 @@ const { type } = require('os');
                              $this.backTo(cursor.char.length - (cursor.char.length == 1 ? 1 : 0));
                              // console.log('[Char]',litteral,cursor.char, _char,'/',$this.code[$this.cursor.index]);
                          }
-                         // console.log('[Litteral]',litteral);
+                        //  console.log('___[Litteral]',litteral, cursor.char);
                          $this.linkWith(resultValue);
                          loop.end();
                      }
@@ -4421,23 +4463,26 @@ const { type } = require('os');
          */
          ressource = this.set(ressource,{parent: null}),
          object = null,
-         _end, statement = 0;
+         _end,_start, statement = 0;
          // console.log('[Parse]', ressource);
          data.end = Array.isArray(data.end) ? data.end : [];
+         data.start = Array.isArray(data.start) ? data.start : [];
          preOperation = null;
          data.statementCount = this.set(data.statementCount,-1);
          data.stopOnBreak = this.set(data.stopOnBreak,false);
+         data.stopOnBrace = this.set(data.stopOnBrace,false);
      return new Promise(function(resolve, reject){
          $this.runner(function(cursor,loop){
              /**
               * S'il y a un mot trouvé, on va vérifier:
               */
              _end = Synthetic.Lang.constants._EOS.values.end.indexOf(cursor.char);
+             _start = Synthetic.Lang.constants._EOS.values.start.indexOf(cursor.char);
+            //  console.log('[END]',cursor.char, _end,_start);
              if(cursor.word){
                  if(cursor.char.length){
                      $this.backTo(cursor.char.length - 1);
                  }
-                //  console.log('[WORD]',cursor.word);
                  /**
                   * S'il existe dans la liste des mots-clés réservés
                   */
@@ -4494,6 +4539,13 @@ const { type } = require('os');
                             loop.end();
                             return;
                         }
+                        /**
+                         * Si on execute les arguments d'une boucle for, on ne veut pas de mot-clé
+                         */
+                        if($this.currentLoop && $this.currentLoop.type == 'for' && !$this.currentLoop.argset){
+                            $this.exception($this.err("syntax error within for scope"),true);
+                            return;
+                        }
                          $this[cursor.word](ressource).then(function(result){
                              if(Synthetic.Lang.valuableReservedKeys.indexOf(cursor.word) >= 0){
                                  object = result;
@@ -4547,6 +4599,7 @@ const { type } = require('os');
                   */
                  else if([Synthetic.Lang.constants.LITTERAL, Synthetic.Lang.constants.TYPE].indexOf($this.getCodeType(cursor.word)) >= 0){
                      loop.stop();
+                    //  console.log('[WORD]',cursor.word, '/', cursor.char);
                     //  console.log('[WORD]',cursor.word,preOperation);
                      /**
                       * On préserve l'intégrité syntaxique de la structure
@@ -4570,7 +4623,7 @@ const { type } = require('os');
                              if((result.type != 'Number' && result.implicitType != 'Number') || result.label != 'variable'){
                                 $this.exception($this.err("Invalid pre-"+(preOperation == '++' ? 'incrementation' : 'decrementation')+" syntax !"),true);
                              }
-                             result.value += preOperation == '++' ? 1 : -1;
+                             result.value = result.value * 1  + (preOperation == '++' ? 1 : -1);
                          }
                          preOperation = null;
                          if(result && result.label == 'type'){
@@ -4585,7 +4638,7 @@ const { type } = require('os');
                              object = result;
                          }
                          statement++;
-                         // console.log('[PARSE]', data,cursor.word);
+                        //  console.log('[PARSE]', $this.code.substr($this.cursor.index-1, 10));
                          if(data.statementCount >= statement){
                              loop.end();
                          }
@@ -4607,7 +4660,9 @@ const { type } = require('os');
              /**
               * Si on constate un caractère EOS sous demande, on met fin à la lecture
               */
-             if(data.end.indexOf(_end) >= 0){
+             if(data.end.indexOf(_end) >= 0 || data.start.indexOf(_start) >= 0 ||
+                ($this.code[$this.cursor.index - 1] == ';' && data.end.indexOf(Synthetic.Lang.constants._EOS.SEMICOLON) >= 0)
+            ){
                  /**
                   * Si on attend un pré-post incrementation, on assure que c'est fait obligatoirement
                   */
@@ -4622,7 +4677,7 @@ const { type } = require('os');
                  return;
              }
              else if(['<', ' ', '\n'].indexOf(cursor.char) < 0 && Synthetic.Lang.blockEOS.indexOf(cursor.char) < 0 && $this.getCodeType(cursor.char) != Synthetic.Lang.constants.LITTERAL){
-                 console.log('[Char][parse]',cursor.char);
+                //  console.log('[Char][parse]',cursor.char,$this.code.substr($this.cursor.index, 20));
              }
              /**
               * on suggère qu'il y a un type prise en compte pour voir s'il y a généricité
@@ -4821,47 +4876,52 @@ const { type } = require('os');
                      ressources: ressources,
                      end: !parentheseless ? [Synthetic.Lang.constants._EOS.PARENTHESE] : []
                  }).then(function(value){
+                     if(parentheseless){
+                         $this.goTo(1);
+                     }
                      // console.log('[Val]',value, $this.code.substr($this.cursor.index-1, 10));
-                     if(parentheseless && $this.code[$this.cursor.index + 1] != '{'){
-                         $this.exception($this.err("syntax error. [ { ] expected !"),true);
-                     }
-                     if(!parentheseless){
-                         $this.goTo(1);
-                     }
-                     braceless = $this.code[$this.cursor.index + (parentheseless ? 1 : 0)] != '{';
-                     reason = !$this.executing ? false : $this.toBoolean(value.value);
-                     
-                     if(!reason || (previousReason !== null && previousReason) ){
-                         $this.setExecutionMod(false);
-                         /**
-                          * Si la raison actuelle est fausse
-                          * on doit encore garder la raison précédente
-                          */
-                         reason = previousReason === null ? reason : previousReason;
-                     }
-                     // console.log('[reason]',$this.previousReason,braceless);
-                     if(!braceless){
-                         $this.goTo(1);
-                     }
-                     else{
-                         $this.restoreScope(key);
-                         key = $this.setScope($this.cursor.scope + 1);
-                     }
-                     $this.parse(ressources,{
-                         end: braceless ? [] : [Synthetic.Lang.constants._EOS.BRACE],
-                         statementCount: braceless ? 1 : -1
-                     }).then(function(e){
-                         $this.setExecutionMod(executing);
-                         $this.previousReason = reason;
-                         // console.log('[ENDIF]',$this.code.substr($this.cursor.index, 10))
-                         if(!braceless){
-                             if($this.code[$this.cursor.index] != '}'){
-                                 $this.exception($this.err("[ } ] expected !"),true);
-                             }
-                             $this.goTo(1);
-                         }
-                         $this.restoreScope(key);
-                         res(e);
+                     $this.toNextChar().then(function(_char){
+                        if(parentheseless && _char != '{'){
+                            $this.exception($this.err("syntax error. [ { ] expected !"),true);
+                        }
+                        if(!parentheseless){
+                            $this.goTo(1);
+                        }
+                        braceless = _char != '{';
+                        reason = !$this.executing ? false : $this.toBoolean(value.value);
+                        
+                        if(!reason || (previousReason !== null && previousReason) ){
+                            $this.setExecutionMod(false);
+                            /**
+                             * Si la raison actuelle est fausse
+                             * on doit encore garder la raison précédente
+                             */
+                            reason = previousReason === null ? reason : previousReason;
+                        }
+                        // console.log('[reason]',$this.previousReason,braceless);
+                        if(!braceless){
+                            $this.goTo(1);
+                        }
+                        else{
+                            $this.restoreScope(key);
+                            key = $this.setScope($this.cursor.scope + 1);
+                        }
+                        $this.parse(ressources,{
+                            end: braceless ? [] : [Synthetic.Lang.constants._EOS.BRACE],
+                            statementCount: braceless ? 1 : -1
+                        }).then(function(e){
+                            $this.setExecutionMod(executing);
+                            $this.previousReason = reason;
+                            // console.log('[ENDIF]', $this.code.substr($this.cursor.index, 10))
+                            if(!braceless){
+                                if($this.code[$this.cursor.index] != '}'){
+                                    $this.exception($this.err("[ } ] expected !"),true);
+                                }
+                                $this.goTo(1);
+                            }
+                            $this.restoreScope(key);
+                            res(e);
+                        });
                      });
                  });
              }
@@ -5266,123 +5326,446 @@ const { type } = require('os');
  /**
   * La méthode loop permet de parcourir une structure de type String, JSON, Array
   */
- $syl.loop = function(ressources){
+ $syl.loop = function(ressources,looptype){
      var $this = this,
+         types = Synthetic.Lang.constants.LOOP,
+         looptype = this.set(looptype,types.LOOP),
          _executing = $this.executing,
          _scopeKey = [$this.saveScope(),$this.saveScope(true)],
          _currentLoop = $this.currentLoop,
-         _cursor;
+         _cursor,start = false, args = {points: [0,0,0], index: 0};
      return new Promise(function(res){
-         var parentheseless;
+         var parentheseless, remain = 0, braceless;
+
+         function executeScope(_char,gotonext,next,end){
+             var gotonext = $this.set(gotonext,false),
+                next = $this.set(next,function(){}),
+                end = $this.set(end,function(){}),
+                braceless = _char != '{';
+            // console.log('[Loop]',$this.executing);
+            //  console.log('[Loop]',$this.executing, remain, gotonext);
+            $this.parse(ressources,{
+                statementCount: !parentheseless && braceless ? 1 : -1,
+                end: !braceless ? [Synthetic.Lang.constants._EOS.BRACE] : []
+            }).then(function(result){
+                // console.log('[Exec]',$this.executing);
+                if($this.code[$this.cursor.index] != '}' && parentheseless){
+                    $this.exception($this.err("[ } ] expected !"), true);
+                }
+                if($this.code[$this.cursor.index] == '}' && braceless){
+                    $this.goTo(1);
+                }
+                if(!braceless){
+                    $this.goTo(1);
+                }
+                if(remain > 1 && $this.executing){
+                    next();
+                }
+                else{
+                    if($this.currentLoop.broken || $this.currentLoop.continued || remain <= 1){
+                        $this.setExecutionMod(_executing,false);
+                    }
+                    if($this.currentLoop.continued && remain > 1){
+                        next();
+                        return;
+                    }
+                    $this.currentLoop = _currentLoop;
+                    $this.restoreScope(_scopeKey);
+                    end();
+                    res(result);
+                }
+            });
+         }
+
          $this.toNextChar().then(function(_char){
              parentheseless = _char != '(';
              if(!parentheseless){
                  $this.goTo(1);
              }
-             $this.value({
-                 ressources: ressources,
-                 object: $this.meta({type: 'Any'},false),
-                 end: [Synthetic.Lang.constants._EOS[parentheseless ? 'BRACE' : 'PARENTHESE']]
-             }).then(function(result){
-                 if($this.executing && !$this.isValidateConstraint(result, [{type: 'JSON'}, {type: 'String'}, {type: 'Array'}])){
-                     $this.exception($this.err("Array or JSON or String type expected, "+result.implicitType+" given !"));
-                 }
-                 /**
-                  * Si le syntaxe comporte des parenthèses,
-                  * on doit survéiller que c'est complet : (...)
-                  */
-                 if(!parentheseless && $this.code[$this.cursor.index-1] != ')'){
-                     $this.exception($this.err("[ ) ] expected !"),true);
-                 }
-                 $this.toNextChar().then(function(_char){
-                     /**
-                      * Comme toute structure en mode syntaxe parentheseless
-                      * on doit vérifier que l'accolade ouvrant début le scope
-                      */
-                     if(_char != '{' && parentheseless){
-                         $this.exception($this.err("[ { ] expected !"), true);
-                     }
-                     if(_char == '{'){
-                         $this.goTo(1);
-                     }
-                     _cursor = $this.copy($this.cursor);
-                     if($this.executing && $this.len(result.value)){
-                         $this.createBlock();
-                         $this.wait(result.value, function(value,index,count,remain,next,end){
-                             $this.cursor = $this.copy(_cursor);
-                             $this.currentLoop = {
-                                 broken: false,
-                                 continued: false,
-                                 type: 'loop',
-                                 args: []
-                             };
-                             $this.meta({
-                                 type: value.type,
-                                 implicitType: value.implicitType,
-                                 name: 'i',
-                                 value: typeof value == 'object' && value != null ? value.value : value
-                             });
-                             $this.meta({
-                                 type: /[\d]+(\.[\d]+)/.test(index) ? 'Number' : 'String',
-                                 name: 'j',
-                                 value: index
-                             });
-                             $this.meta({
-                                 type: 'Number',
-                                 name: 'k',
-                                 value: count
-                             });
-                             // console.log('[Loop]',$this.executing);
-                             $this.parse(ressources,{
-                                 statementCount: !parentheseless && _char != '{' ? 1 : -1,
-                                 end: _char == '{' ? [Synthetic.Lang.constants._EOS.BRACE] : []
-                             }).then(function(result){
-                                //  console.log('[Loop]',$this.executing);
-                                 if($this.code[$this.cursor.index] != '}' && parentheseless){
-                                     $this.exception($this.err("[ } ] expected !"), true);
-                                 }
-                                 // console.log('[Remain]',remain, $this.executing, $this.currentLoop.continued)
-                                 if(remain <= 1 || !$this.executing){
-                                     if($this.code[$this.cursor.index] == '}'){
-                                         $this.goTo(1);
-                                     }
-                                     if($this.currentLoop.broken || $this.currentLoop.continued){
-                                         $this.setExecutionMod(_executing,false);
-                                     }
-                                     if($this.currentLoop.continued && remain > 1){
-                                         next();
-                                     }
-                                     else{
-                                         $this.currentLoop = _currentLoop;
-                                         $this.restoreScope(_scopeKey);
-                                         end();
-                                         res(result);
-                                     }
-                                 }
-                                 else{
-                                     next();
-                                 }
-                             });
-                         });
-                     }
-                     else{
-                         $this.parse(ressources,{
-                             statementCount: !parentheseless && _char != '{' ? 1 : -1,
-                             end: _char == '{' ? [Synthetic.Lang.constants._EOS.BRACE] : []
-                         }).then(function(result){
-                             if($this.code[$this.cursor.index] != '}' && parentheseless){
-                                 $this.exception($this.err("[ } ] expected !"), true);
-                             }
-                             if($this.code[$this.cursor.index] == '}'){
-                                 $this.goTo(1);
-                             }
-                             $this.currentLoop = _currentLoop;
-                             $this.restoreScope(_scopeKey);
-                             res(result);
-                         });
-                     }
-                 });
-             });
+             $this.currentLoop = {
+                 broken: false,
+                 continued: false,
+                 type: 'loop',
+                 args: []
+             };
+             if(looptype == types.LOOP){
+                $this.currentLoop.type = 'loop';
+                /**
+                 * On recherche la valeur à parcourir !
+                 */
+                $this.value({
+                    ressources: ressources,
+                    object: $this.meta({type: 'Any'},false),
+                    end: [Synthetic.Lang.constants._EOS[parentheseless ? 'BRACE' : 'PARENTHESE']]
+                }).then(function(result){
+                    if($this.executing && !$this.isValidateConstraint(result, [{type: 'JSON'}, {type: 'String'}, {type: 'Array'}])){
+                        $this.exception($this.err("Array or JSON or String type expected, "+result.implicitType+" given !"));
+                    }
+                    /**
+                     * Si le syntaxe comporte des parenthèses,
+                     * on doit survéiller que c'est complet : (...)
+                     */
+                    if(!parentheseless && $this.code[$this.cursor.index-1] != ')'){
+                        $this.exception($this.err("[ ) ] expected !"),true);
+                    }
+                    if(parentheseless){
+                        $this.goTo(1);
+                    }
+                    $this.toNextChar().then(function(_char){
+                        braceless = _char != '{';
+                        /**
+                         * Comme toute structure en mode syntaxe parentheseless
+                         * on doit vérifier que l'accolade ouvrant début le scope
+                         */
+                        if(braceless && parentheseless){
+                            $this.exception($this.err("[ { ] expected !"), true);
+                        }
+                        if(!braceless){
+                            $this.goTo(1);
+                        }
+                        // console.log('[Result]',_char);
+                        _cursor = $this.copy($this.cursor);
+                        if($this.executing && $this.len(result.value)){
+                            $this.createBlock();
+                            $this.wait(result.value, function(value,index,count,_remain,next,end){
+                                $this.cursor = $this.copy(_cursor);
+                                console.log({value,index,count,_remain});
+                                remain = _remain;
+                                $this.currentLoop = {
+                                    broken: false,
+                                    continued: false,
+                                    type: 'loop',
+                                    args: []
+                                };
+                                $this.meta({
+                                    type: value.type,
+                                    implicitType: value.implicitType,
+                                    name: 'i',
+                                    value: typeof value == 'object' && value != null ? value.value : value
+                                });
+                                $this.meta({
+                                    type: /[\d]+(\.[\d]+)/.test(index) ? 'Number' : 'String',
+                                    name: 'j',
+                                    value: index
+                                });
+                                $this.meta({
+                                    type: 'Number',
+                                    name: 'k',
+                                    value: count
+                                });
+                                executeScope(_char,remain > 1 && $this.executing, next, end);
+                                // console.log('[Loop]',$this.executing);
+                                // $this.parse(ressources,{
+                                //     statementCount: !parentheseless && _char != '{' ? 1 : -1,
+                                //     end: _char == '{' ? [Synthetic.Lang.constants._EOS.BRACE] : []
+                                // }).then(function(result){
+                                // //  console.log('[Loop]',$this.executing);
+                                //     if($this.code[$this.cursor.index] != '}' && parentheseless){
+                                //         $this.exception($this.err("[ } ] expected !"), true);
+                                //     }
+                                //     // console.log('[Remain]',remain, $this.executing, $this.currentLoop.continued)
+                                //     if(remain <= 1 || !$this.executing){
+                                //         if($this.code[$this.cursor.index] == '}'){
+                                //             $this.goTo(1);
+                                //         }
+                                //         if($this.currentLoop.broken || $this.currentLoop.continued){
+                                //             $this.setExecutionMod(_executing,false);
+                                //         }
+                                //         if($this.currentLoop.continued && remain > 1){
+                                //             next();
+                                //         }
+                                //         else{
+                                //             $this.currentLoop = _currentLoop;
+                                //             $this.restoreScope(_scopeKey);
+                                //             end();
+                                //             res(result);
+                                //         }
+                                //     }
+                                //     else{
+                                //         next();
+                                //     }
+                                // });
+                            });
+                        }
+                        else{
+                            remain = 0;
+                            $this.executing = false;
+                            executeScope(_char);
+                        }
+                    });
+                });
+             }
+             else if(looptype == types.WHILE){
+                 var fakeObject = $this.meta({type: 'Any'},false),
+                    reason,scopeCreated = false;
+                _cursor = $this.copy($this.cursor);
+                function until(){
+                    $this.cursor = $this.copy(_cursor);
+                    $this.currentLoop = {
+                        broken: false,
+                        continued: false,
+                        type: 'while',
+                        args: []
+                    };
+                    $this.value({
+                        ressources: ressources,
+                        object: fakeObject,
+                        end: [Synthetic.Lang.constants._EOS[parentheseless ? 'BRACE' : 'PARENTHESE']]
+                    }).then(function(result){
+                        if(!parentheseless && $this.code[$this.cursor.index-1] != ')'){
+                            $this.exception($this.err("[ ) ] expected !"),true);
+                        }
+                        if(parentheseless){
+                            $this.goTo(1);
+                        }
+                        $this.toNextChar().then(function(_char){
+                            /**
+                             * Comme toute structure en mode syntaxe parentheseless
+                             * on doit vérifier que l'accolade ouvrant début le scope
+                             */
+                            if(_char != '{' && parentheseless){
+                                $this.exception($this.err("[ { ] expected !"), true);
+                            }
+                            if(_char == '{'){
+                                $this.goTo(1);
+                            }
+                            if(!scopeCreated && $this.executing){
+                                $this.createBlock();
+                                scopeCreated = true;
+                            }
+                            reason = !$this.executing ? false : result.value == 'false' ? true : $this.toBoolean(result.value);
+                            $this.executing = reason;
+                            remain = reason ? 2 : 0;
+                            executeScope(_char,reason,until);
+                            // $this.parse(ressources,{
+                            //     statementCount: !parentheseless && _char != '{' ? 1 : -1,
+                            //     end: _char == '{' ? [Synthetic.Lang.constants._EOS.BRACE] : []
+                            // }).then(function(result){
+                            //     if($this.code[$this.cursor.index] != '}' && parentheseless){
+                            //         $this.exception($this.err("[ } ] expected !"), true);
+                            //     }
+                            //     if($this.code[$this.cursor.index] == '}'){
+                            //         $this.goTo(1);
+                            //     }
+                            //     // console.log('[Exe]',$this.executing,$this.currentLoop.broken, $this.currentLoop.continued);
+                            //     if($this.executing){
+                            //         until();
+                            //     }
+                            //     else{
+                            //         if($this.currentLoop.broken || $this.currentLoop.continued){
+                            //             $this.setExecutionMod(_executing,false);
+                            //         }
+                                    
+                            //         if($this.currentLoop.continued){
+                            //             until();
+                            //         }
+                            //         else{
+                            //             $this.currentLoop = _currentLoop;
+                            //             $this.restoreScope(_scopeKey);
+                            //             res(result);
+                            //         }
+                            //     }
+                            // });
+                        });
+                    });
+                }
+                until();
+             }
+             else if(looptype == types.FOR){
+                args.points[args.index] = $this.cursor.index + (!parentheseless ? 1 : 0);
+                _cursor = $this.copy($this.cursor);
+                start = true;
+                $this.runner(function(cursor,loop){
+                    if(cursor.char == ';'){
+                        if(looptype == types.FORIN){
+                            $this.exception($this.err("syntax error !"),true);
+                        }
+                        args.index++;
+                        /**
+                         * On ne prend que 3 paramètres
+                         */
+                        if(args.index < 3){
+                            args.points[args.index] = $this.copy($this.cursor);
+                            args.points[args.index].index++;
+                        }
+                        else{
+                            loop.end();
+                        }
+                        if(args.index == 2){
+                            loop.stop();
+                            $this.setExecutionMod(false);
+                            $this.parse(ressources, {
+                                end: [Synthetic.Lang.constants._EOS.PARENTHESE],
+                                start: [Synthetic.Lang.constants._EOS.BRACE]
+                            }).then(function(){
+                                if($this.code[$this.cursor.index] == ')'){
+                                    $this.goTo(1);
+                                }
+                                $this.toNextChar().then(function(_char){
+                                    $this.goTo(1);
+                                    args.points.push($this.copy($this.cursor));
+                                    $this.setExecutionMod(_executing);
+                                    loop.end();
+                                });
+                            })
+                        }
+                    }
+                    if(cursor.word == 'in' && args.index == 0){
+                        looptype = types.FORIN;
+                        loop.end();
+                    }
+                }).then(function(){
+                    // console.log('[FOR]',args, looptype, $this.code.substr($this.cursor.index, 10));
+                    $this.cursor = $this.copy(_cursor);
+                    if(looptype == types.FORIN){
+                        $this.currentLoop = {
+                            broken: false,
+                            continued: false,
+                            type: 'forin',
+                            args: [],
+                            argset: false,
+                        };
+                        /**
+                         * Récupération des arguments d'itération
+                         */
+                        $this.parse(ressources).then(function(){
+                            /**
+                             * Récupération de la variable à parcourir
+                             */
+                            _cursor = $this.copy($this.cursor);
+                            $this.currentLoop.argset = true;
+                            $this.value({
+                                object: $this.meta({type: 'Any'}, false),
+                                ressources: ressources,
+                                end: [Synthetic.Lang.constants._EOS[parentheseless ? 'BRACE' : 'PARENTHESE']]
+                            }).then(function(object){
+                                // console.log('[Val]',value);
+                                if($this.executing){
+                                    if(['Array','JSON'].indexOf(object.type) < 0 && ['Array','JSON'].indexOf(object.implicitType) < 0){
+                                        $this.cursor = $this.copy(_cursor);
+                                        $this.exception($this.err("Array or JSON value expected, " + object.implicitType+" given !"));
+                                    }
+                                }
+                                else{
+                                    object = {value: {}};
+                                }
+                                $this.createBlock();
+                                if(parentheseless){
+                                    $this.goTo(1);
+                                }
+                                $this.toNextChar().then(function(_char){
+                                    _cursor = $this.copy($this.cursor);
+                                    /**
+                                     * Si l'objet ne contient pas d'éléments,
+                                     * on ne le parcourt pas
+                                     */
+                                    if($this.len(object.value)){
+                                        // console.log('[Before call]')
+                                        $this.wait(object.value, function(value,index,count,_remain,next,end){
+                                            var list = [value,$this.toVariableStructure(index)];
+                                            $this.currentLoop.broken = false;
+                                            $this.currentLoop.continued = false;
+                                            remain = _remain;
+                                            $this.cursor = $this.copy(_cursor);
+                                            // console.log('[ARG]', remain, $this.currentLoop == null);
+                                            for(var i in $this.currentLoop.args){
+                                                if('value' in $this.currentLoop.args[i]){
+                                                    delete $this.currentLoop.args[i].value;
+                                                }
+                                                if(i < list.length){
+                                                    if(!$this.isSuitable(list[i],$this.currentLoop.args[i]) && (i < 0 || [$this.currentLoop.args[i].type, $this.currentLoop.args[i].implicitType].indexOf('String') < 0) ){
+                                                        $this.exception($this.err("[ "+$this.currentLoop.args[i].name+" ] is not suitable with "+(i > 0 ? "key" : "value")+" of object !"));
+                                                    }
+                                                    /**
+                                                     * On crée les variables de l'étendue
+                                                     */
+                                                    $this.meta($this.extend(list[i], $this.currentLoop.args[i]));
+                                                }
+                                                else{
+                                                    break;
+                                                }
+                                            }
+                                            // console.log({value,index,count})
+                                            executeScope(_char,remain > 1 && $this.executing, next, end);
+                                        });
+                                    }
+                                    else{
+                                        remain = 0;
+                                        $this.executing = false;
+                                        executeScope(_char);
+                                    }
+                                });
+                            });
+                        });
+                    }
+                    else{
+                        // console.log('[CLASSIC]',args);
+                        $this.createBlock();
+                        $this.cursor.index = $this.copy(args.points[0]);                        
+                        // console.log('[CURSOR]',$this.cursor,$this.code.substr($this.cursor.index, 10));
+                        $this.parse(ressources,{
+                            end: [Synthetic.Lang.constants._EOS.SEMICOLON]
+                        }).then(function(){
+                            args.points.shift();
+                            _cursor = $this.copy($this.cursor);
+                            function until(){
+                                $this.cursor = $this.copy(_cursor);
+                                $this.currentLoop = {
+                                    broken: false,
+                                    continued: false,
+                                    type: 'for',
+                                    args: [],
+                                    argset: false,
+                                };
+                                $this.wait(args.points, function(v,k,count,_remain,next,end){
+                                    // console.log({value,index});
+                                    /**
+                                     * La deuxième manche est pour le calcule de la valeur conditionnelle
+                                     */
+                                    if(count == 0){
+                                        $this.value({
+                                            ressources: ressources,
+                                            object: $this.meta({type:'Any'},false),
+                                            end: [Synthetic.Lang.constants._EOS.PARENTHESE]
+                                        }).then(function(result){
+                                            console.log('[Result]',result);
+                                            $this.currentLoop.reason = $this.toBoolean(result.value);
+                                            next();
+                                        });
+                                    }
+                                    /**
+                                     * Ensuite on exécute la dernière partie de la boucle
+                                     */
+                                    else{
+                                        // console.log('[Last is]');
+                                        $this.parse(ressources,{
+                                            end: !parentheseless ? [Synthetic.Lang.constants._EOS.PARENTHESE] : [],
+                                            start: parentheseless ? [Synthetic.Lang.constants._EOS.BRACE] : []
+                                        }).then(function(){
+                                            $this.currentLoop.argset = true;
+                                            if(!parentheseless){
+                                                $this.goTo(1);
+                                            }
+                                            $this.toNextChar().then(function(_char){
+                                                if(_char != '{' && parentheseless){
+                                                    $this.exception($this.err("[ { ] expected !"), true);
+                                                }
+                                                if(_char == '{'){
+                                                    $this.goTo(1);
+                                                }
+                                                remain = $this.currentLoop.reason ? 2 : 0;
+                                                // console.log('[Reason]',$this.currentLoop.reason);
+                                                executeScope(_char, $this.currentLoop.reason, until);
+                                            });
+                                        });
+                                    }
+                                });
+                            }
+                            until();
+                        });
+                    }
+                });
+             }
          });
      });
  }
@@ -5391,91 +5774,94 @@ const { type } = require('os');
   * La méthode while permet d'exécuter une boucle while
   */
  $syl.while = function(ressources){
-     var $this = this,
-         _executing = $this.executing,
-         _scopeKey = [$this.saveScope(),$this.saveScope(true)],
-         _currentLoop = $this.currentLoop,
-         _cursor;
-     return new Promise(function(res){
-         var parentheseless, 
-             fakeObject = $this.meta({type: 'Any'},false),
-             reason,scopeCreated = false;
-         $this.toNextChar().then(function(_char){
-             parentheseless = _char != '(';
-             if(!parentheseless){
-                 $this.goTo(1);
-             }
-             _cursor = $this.copy($this.cursor);
-             function until(){
-                 $this.cursor = $this.copy(_cursor);
-                 $this.currentLoop = {
-                     broken: false,
-                     continued: false,
-                     type: 'while',
-                     args: []
-                 };
-                 $this.value({
-                     ressources: ressources,
-                     object: fakeObject,
-                     end: [Synthetic.Lang.constants._EOS[parentheseless ? 'BRACE' : 'PARENTHESE']]
-                 }).then(function(result){
-                     if(!parentheseless && $this.code[$this.cursor.index-1] != ')'){
-                         $this.exception($this.err("[ ) ] expected !"),true);
-                     }
-                     $this.toNextChar().then(function(_char){
-                         /**
-                          * Comme toute structure en mode syntaxe parentheseless
-                          * on doit vérifier que l'accolade ouvrant début le scope
-                          */
-                         if(_char != '{' && parentheseless){
-                             $this.exception($this.err("[ { ] expected !"), true);
-                         }
-                         if(_char == '{'){
-                             $this.goTo(1);
-                         }
-                         if(!scopeCreated && $this.executing){
-                             $this.createBlock();
-                             scopeCreated = true;
-                         }
-                         reason = !$this.executing ? false : result.value == 'false' ? true : $this.toBoolean(result.value);
-                         $this.executing = reason;
-                         $this.parse(ressources,{
-                             statementCount: !parentheseless && _char != '{' ? 1 : -1,
-                             end: _char == '{' ? [Synthetic.Lang.constants._EOS.BRACE] : []
-                         }).then(function(result){
-                             if($this.code[$this.cursor.index] != '}' && parentheseless){
-                                 $this.exception($this.err("[ } ] expected !"), true);
-                             }
-                             if($this.code[$this.cursor.index] == '}'){
-                                 $this.goTo(1);
-                             }
-                             if($this.executing){
-                                 until();
-                             }
-                             else{
-                                 if($this.currentLoop.broken || $this.currentLoop.continued){
-                                     $this.setExecutionMod(_executing,false);
-                                 }
+     return this.loop(ressources, Synthetic.Lang.constants.LOOP.WHILE);
+    //  var $this = this,
+    //      _executing = $this.executing,
+    //      _scopeKey = [$this.saveScope(),$this.saveScope(true)],
+    //      _currentLoop = $this.currentLoop,
+    //      _cursor;
+    //  return new Promise(function(res){
+    //      var parentheseless, 
+    //          fakeObject = $this.meta({type: 'Any'},false),
+    //          reason,scopeCreated = false;
+    //      $this.toNextChar().then(function(_char){
+    //          parentheseless = _char != '(';
+    //          if(!parentheseless){
+    //              $this.goTo(1);
+    //          }
+    //          _cursor = $this.copy($this.cursor);
+    //          function until(){
+    //              $this.cursor = $this.copy(_cursor);
+    //              $this.currentLoop = {
+    //                  broken: false,
+    //                  continued: false,
+    //                  type: 'while',
+    //                  args: []
+    //              };
+    //              $this.value({
+    //                  ressources: ressources,
+    //                  object: fakeObject,
+    //                  end: [Synthetic.Lang.constants._EOS[parentheseless ? 'BRACE' : 'PARENTHESE']]
+    //              }).then(function(result){
+    //                  if(!parentheseless && $this.code[$this.cursor.index-1] != ')'){
+    //                      $this.exception($this.err("[ ) ] expected !"),true);
+    //                  }
+    //                  $this.toNextChar().then(function(_char){
+    //                      /**
+    //                       * Comme toute structure en mode syntaxe parentheseless
+    //                       * on doit vérifier que l'accolade ouvrant début le scope
+    //                       */
+    //                      if(_char != '{' && parentheseless){
+    //                          $this.exception($this.err("[ { ] expected !"), true);
+    //                      }
+    //                      if(_char == '{'){
+    //                          $this.goTo(1);
+    //                      }
+    //                      if(!scopeCreated && $this.executing){
+    //                          $this.createBlock();
+    //                          scopeCreated = true;
+    //                      }
+    //                      reason = !$this.executing ? false : result.value == 'false' ? true : $this.toBoolean(result.value);
+    //                      $this.executing = reason;
+    //                     //  console.log('[Reason]',reason);
+    //                      $this.parse(ressources,{
+    //                          statementCount: !parentheseless && _char != '{' ? 1 : -1,
+    //                          end: _char == '{' ? [Synthetic.Lang.constants._EOS.BRACE] : []
+    //                      }).then(function(result){
+    //                          if($this.code[$this.cursor.index] != '}' && parentheseless){
+    //                              $this.exception($this.err("[ } ] expected !"), true);
+    //                          }
+    //                          if($this.code[$this.cursor.index] == '}'){
+    //                              $this.goTo(1);
+    //                          }
+    //                          if($this.executing){
+    //                              until();
+    //                          }
+    //                          else{
+    //                              if($this.currentLoop.broken || $this.currentLoop.continued){
+    //                                  $this.setExecutionMod(_executing,false);
+    //                              }
                                  
-                                 if($this.currentLoop.continued){
-                                     until();
-                                 }
-                                 else{
-                                     $this.currentLoop = _currentLoop;
-                                     $this.restoreScope(_scopeKey);
-                                     res(result);
-                                 }
-                             }
-                         })
-                     });
-                 });
-             }
-             until();
-         });
-     });
+    //                              if($this.currentLoop.continued){
+    //                                  until();
+    //                              }
+    //                              else{
+    //                                  $this.currentLoop = _currentLoop;
+    //                                  $this.restoreScope(_scopeKey);
+    //                                  res(result);
+    //                              }
+    //                          }
+    //                      })
+    //                  });
+    //              });
+    //          }
+    //          until();
+    //      });
+    //  });
  }
 
  $syl.for = function(ressources){
+     return this.loop(ressources,Synthetic.Lang.constants.LOOP.FOR);
     var $this = this,
         _executing = $this.executing,
         _scopeKey = [$this.saveScope(),$this.saveScope(true)],
@@ -5534,6 +5920,7 @@ const { type } = require('os');
                      * Récupération de la variable à parcourir
                      */
                     _cursor = $this.copy($this.cursor);
+                    $this.currentLoop.argset = true;
                     $this.value({
                         object: $this.meta({type: 'Any'}, false),
                         ressources: ressources,
@@ -5549,16 +5936,32 @@ const { type } = require('os');
                         else{
                             value = {value: {}};
                         }
-                        $this.currentLoop.argset = true;
                         $this.createBlock();
-                        $this.wait(value.value, function(value,index,count,remain,next,end){
-                            var list = [value,index];
-                            for(var i in $this.currentLoop.args){
-                                if(i < list.length){
-                                    
-                                }
+                        $this.toNextChar().then(function(_char){
+                            // console.log('[argsm]',$this.currentLoop.args);
+                            if($this.len(value.value)){
+                                $this.wait(value.value, function(value,index,count,remain,next,end){
+                                    var list = [value,index];
+                                    for(var i in $this.currentLoop.args){
+                                        if('value' in $this.currentLoop.args){
+                                            delete $this.currentLoop.args.value;
+                                        }
+                                        if(i < list.length){
+                                            if(!$this.isSuitable(list[i],$this.currentLoop.args[i]) && (i < 0 || [$this.currentLoop.args[i].type, $this.currentLoop.args[i].implicitType].indexOf('String') < 0) ){
+                                                $this.exception($this.err("[ "+$this.currentLoop.args[i].name+" ] is not suitable with "+(i > 0 ? "key" : "value")+" of object !"));
+                                            }
+                                        }
+                                        /**
+                                         * On crée les variables de l'étendue
+                                         */
+                                        $this.meta(list[i], $this.currentLoop.args[i]);
+                                    }
+                                    console.log({value,index,count})
+                                });
                             }
-                            console.log({value,index,count})
+                            else{
+                                console.log('[ERR]',_char);
+                            }
                         });
                     });
                 });
