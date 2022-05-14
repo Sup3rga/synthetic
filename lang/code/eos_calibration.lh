@@ -1,0 +1,5 @@
+Number t = 1,
+       k = 0;
+// Any nom = t++;
+
+print t + " " + k

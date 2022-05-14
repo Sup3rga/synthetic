@@ -29,100 +29,101 @@
 //     bien : "Ok"
 // })
 
-// // prenom = "Julien"
+// prenom = "Julien"
 
-// String test(String nom : (tester){
-//     return tester + " !!!"
-// }
-// ){ 
-//     String bien = "Ok"
-//     // nom bien
-//     // print tk
-//     return nom "bien"
-// }
+String test(String nom : (tester){
+    return tester + " !!!"
+}
+){ 
+    String bien = "Ok"
+    // nom bien
+    // print tk
+    return nom "bien"
+}
 
-// print test((tk){
-//     return "Hello everyone ! " + tk
-// })
+print test((tk){
+    return "Hello everyone ! " + tk
+})
 
-// fn(String nom){
-//     function(ok){
-//         print ok + " " + nom
-//     }
-//     print "Bonsoir " + nom
-//     return function
-// }
+fn(String nom){
+    function(ok){
+        print ok + " " + nom
+    }
+    print "Bonsoir " + nom
+    return function
+}
 
-// alias = fn("Bien")
+alias = fn("Bien")
 
-// alias "Synthetic"
-// // print test "le bonjour"
-// // print test "le bonsoir"
+alias "Synthetic"
+// print test "le bonjour"
+// print test "le bonsoir"
 
-// String fn(String nom){
-//     print "Bonjour " + nom + " !"
-//     return "nulsl"
-// }
+String fn(String nom){
+    print "Bonjour " + nom + " !"
+    return "nulsl"
+}
 
-// host(callback,test){
-//     callback(test)
-//     // print "bien"
-// }
+host(callback,test){
+    callback(test)
+    // print "bien"
+}
 
-// host(fn, "Jacques")
-// override test = null
-// print test
+host(fn, "Jacques")
+override test = null
+print test
 
-// String nom = maj tap "Votre nom : "
-// String prenom = tap "Votre prenom : "
-// Number age = int tap "Votre age : "
+String nom = maj tap "Votre nom : "
+String prenom = tap "Votre prenom : "
+Number age = int tap "Votre age : "
 
-// debug "Bonsoir " + prenom + " "+ nom+" ! agé de "+age+" ans";
+debug "Bonsoir " + prenom + " "+ nom+" ! agé de "+age+" ans";
 
-// if age < 18 {
-//     print "Vous êtes donc mineur !"
-// }
-// elif age <= 50 {
-//     debug "Vous êtes jeune et adulte !"
-// }
-// else{
-//     print "Vous êtes donc majeur et vieux !"
-// }
+if age < 18 {
+    print "Vous êtes donc mineur !"
+}
+elif age <= 50 {
+    debug "Vous êtes jeune et adulte !"
+}
+else{
+    print "Vous êtes donc majeur et vieux !"
+}
 
-// String test(String e){
-//     return (){
-//         print "Bonjour " + e
-//         JSON<...> test = {
-//             ok : "word",
-//             cool: {
-//                 bien : callable(){
-//                     return "Bien"
-//                 }
-//             }
-//         };
-//         // print test;
-//         return "bien"
-//     }
-// }
+String test(String e){
+    return (){
+        print "Bonjour " + e
+        JSON<...> test = {
+            ok : "word",
+            cool: {
+                bien : callable(){
+                    return "Bien"
+                }
+            }
+        };
+        // print test;
+        return "bien"
+    }
+}
 
-// prime = test "Eric !" ()
-// second = test "Jacques" ()
-// print ("[PRIME]", prime)
+prime = test "Eric !" ()
+second = test "Jacques" ()
+print ("[PRIME]", prime)
 // prime()
 // second()
 // print test var
 
 // print var
 
-// JSON<String,String> callbacks = {}
+JSON<String,String> callbacks = {}
 
-// callbacks.bien = test;
+callbacks.bien = test;
 
-// print callbacks
+print callbacks
 
-// String prime(callable unset String bien, String test){
-//     print "Cool !"
-//     print bien test
-// }
+String prime(callable unset String bien, String test){
+    print test
+    print typeof bien;
+    return "bien"
+}
 
-// prime(callbacks.bien, "Ok !")
+prime(callbacks.bien, "Ok !")

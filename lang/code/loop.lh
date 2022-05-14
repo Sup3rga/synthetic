@@ -22,24 +22,47 @@
 //     // continue
 //     print "cool"
 // }
-Number k = 0
+// Number k = 0
 // while k < 5 {
-//     print "[K] " + k
-//     // try{
-//     //     raise "Cool !"
-//     // }catch(e){
-
-//     // }
-//     if k == 2 {
-//         k += 2
-//         continue
+//     print ("[K] " + k);
+//     try{
+//         if k % 2 == 0 {
+//             raise "bien";
+//         }
+//         else print "[OUI] " + k
 //     }
-//     ++ k
+//     catch(e){
+//         print "[NON] " + k
+//     }
+//     // if k % 2 == 0 {
+//     //     print "I est pair !"
+//     // }
+//     // if k == 2 {
+//     //     k += 2
+//     //     continue
+//     // }
+//     k++
 // }
 
-
-for (Number i = 0; i < 5; i++){
-    print i
+// try{
+//     print "Cool !"
+// }
+// catch(e){
+//     print "[NON] " + e
+// }
+Boolean premier;
+for(Number i = 2; i < 50; i++){
+    premier = true
+    // print "Pour i = " + i
+    for Number j = i; j >= 2; j--{
+        // debug "[J__]" + j
+        if i != j && i % j == 0 {
+            // debug "[J] " + j + " > " + i 
+            premier = false
+            break
+        }
+    }
+    if premier {print i + " est un nombre " + (premier ? "premier" : "ordinaire")}
 }
 
 print "La boucle est finie !"

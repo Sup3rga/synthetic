@@ -1,5 +1,8 @@
 object = "biens"
-
+Number i = 4, j = 2;
+if i != j && i % j == 0 {
+    debug "[J] " + j + " > " + i 
+}
 if object!="bien"{
     print "Hello !"
 }elif object == "bien" {
