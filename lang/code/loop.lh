@@ -50,19 +50,8 @@
 // catch(e){
 //     print "[NON] " + e
 // }
-Boolean premier;
-for(Number i = 2; i < 50; i++){
-    premier = true
-    // print "Pour i = " + i
-    for Number j = i; j >= 2; j--{
-        // debug "[J__]" + j
-        if i != j && i % j == 0 {
-            // debug "[J] " + j + " > " + i 
-            premier = false
-            break
-        }
-    }
-    if premier {print i + " est un nombre " + (premier ? "premier" : "ordinaire")}
+for(Number i = 2; i < 5; i++){
+    print "[I] " + i
 }
 
 print "La boucle est finie !"

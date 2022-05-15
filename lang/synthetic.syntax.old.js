@@ -133,7 +133,6 @@ const { type } = require('os');
      this.modules = {};
      this.scopeSaver = {};
      this.objectAddrSaver = {};
-     this.structureSaver = {current: {}, old: {}};
      this.currentScope = this.addr();
      this.rootScope = this.currentScope;
      this.currentObjectAddr = null;
@@ -248,54 +247,41 @@ const { type } = require('os');
  /**
   * La méthode garbage pemet de nettoyer le stockage inutile des variables
   */
- $syl.garbage = function(more,block){
+ $syl.garbage = function(more){
      var addr = [],
-         block = this.set(block, null),
          more = this.set(more, false);
-    for(var i in this.modules){
-        if(block){
-            i = block;
-        }
-        if(null in this.modules[i].modules){
-            addr.push(this.modules[i].modules[null].addr);
-            this.freeLinkOf(this.modules[i].modules[null]);
-            delete this.modules[i].modules[null];
-        }
-        /**
-         * Si on en demande plus comme :
-         *  * la suppression des variables non-existantes
-         */
-        if(more){
-            for(var j in this.modules[i].modules){
-                /**
-                 * Les variables qui ont été comme non-existant doivent être supprimées !
-                 */
-                if(
-                    (this.modules[i].modules[j].label == 'variable' && !('value' in this.modules[i].modules[j]) ) 
-                    // ||
-                    // (i != this.rootScope && this.modules[i].modules[j].linked == 0)
-                ){
-                    addr.push(this.modules[i].modules[j].addr);
-                    this.freeLinkOf(this.modules[i].modules[j]);
-                    delete this.modules[i].modules[j];
-                }
-                else if(i != this.rootScope && this.modules[i].modules[j].linked == 0){
-                    // console.log('[I]', this.modules[i].modules[j].name)
-                    addr.push(this.modules[i].modules[j].addr);
-                    this.freeLinkOf(this.modules[i].modules[j]);
-                    delete this.modules[i].modules[j];
-                }
-            }
-        }
-        if(block){
-            break;
-        }
+     for(var i in this.modules){
+         if(null in this.modules[i].modules){
+             addr.push(this.modules[i].modules[null].addr);
+             
+             
+             this.freeLinkOf(this.modules[i].modules[null]);
+             delete this.modules[i].modules[null];
+         }
+         /**
+          * Si on en demande plus comme :
+          *  * la suppression des variables non-existantes
+          */
+         if(more){
+             for(var j in this.modules[i].modules){
+                 /**
+                  * Les variables qui ont été comme non-existant doivent être supprimées !
+                  */
+                 if(this.modules[i].modules[j].label == 'variable' && !('value' in this.modules[i].modules[j]) ){
+                     addr.push(this.modules[i].modules[j].addr);
+                     this.freeLinkOf(this.modules[i].modules[j]);
+                     delete this.modules[i].modules[j];
+                 }
+                 else if(i != this.rootScope && this.modules[i].modules[j].linked == 0){
+                     
+                     
+                     
+                 }
+             }
+         }
      }
      for(var i in addr){
          delete Synthetic.Lang.objects[addr[i]];
-     }
-     if(block && this.len(this.modules[block].modules) == 0){
-        delete this.modules[block];
      }
  }
  /**
@@ -381,7 +367,6 @@ const { type } = require('os');
          typeOrigin: null,
          constraints: null,
          native: false,
-         async: false,
          final: this.access.final,
          constant: this.access.const,
          ref: this.cursor.scope+','+this.cursor.index,
@@ -813,61 +798,6 @@ const { type } = require('os');
      }
      return this;
  }
-/**
- * La méthode setStructure permet d'enregistrement sainement des structures de contrôle
- * en retournant la clé de la structure actuelle et celle de la précédente si elle existe
- */
- $syl.setStructure = function(key,value){
-    var k = 0, v = -1;
-    if(key in this.structureSaver.current){
-        for(var i in this.structureSaver.old){
-            if(this.structureSaver.old[i] == this.structureSaver.current[key]){
-                v = i;
-                break;
-            }
-        }
-    }
-    while(k in this.structureSaver.old){ k++; }
-    this.structureSaver.current[key] = value;
-    this.structureSaver.old[k] = value;
-    return [k,i];
- }
- /**
-  * La méthode restoreStructure permet de restaurer sainement des structures de contrôle
-  * tout en supprimant celle d'actuelle
-  */
- $syl.restoreStructure = function(index,key){
-    var keys = Array.isArray(key) ? key : [key],
-        k;
-    if(index in this.structureSaver.current){
-        for(var i in keys){
-            if(Array.isArray(keys[i])){
-                keys[i] = keys[i][0];
-            }
-            for(k in this.structureSaver.old){
-                if(this.structureSaver.old[k] == this.structureSaver.current[index]){
-                    this.structureSaver.current[index] = null;
-                    break;
-                }
-            }
-            if(keys[i] in this.structureSaver.old){
-                this.structureSaver.current[index] = this.structureSaver.old[keys[i]];
-                if(keys[i] != k){
-                    delete this.structureSaver.old[k];
-                }
-            }
-        }
-    }
- }
-/**
- * La méthode getStructure permet de récupérer sainement la structure de contrôle actuelle
- */
- $syl.getStructure = function(index){
-     return index in this.structureSaver.current ? this.structureSaver.current[index] : null;
- }
- /**
-  * La méthode setExecutionMod permet de définir sainement le mode d'exécution du code
-  */
  $syl.setExecutionMod = function(mod, relative){
      relative = this.set(relative,true);
      var r = (!this.tryingBlock || !relative ? true : !this.tryingBlock.blocked);
@@ -1210,6 +1140,7 @@ const { type } = require('os');
      }
      return r;
  }
+
  /**
   * La méthode suitable permet de comparer si deux variable sont compatible en type
   * et en contrainte de type
@@ -1293,9 +1224,11 @@ const { type } = require('os');
      }
      return r;
  }
+ 
  /**
   * @SECTOR: Value
   */
+ 
  /**
   * La méthode toBoolean convertit toute valeur primitive en booléen
   */
@@ -1500,7 +1433,7 @@ const { type } = require('os');
      return list[list.length - 1];
  }
  /**
-  * La méthode struct permet de faire la sérialization d'une structure (JSON|Array)
+  * La méthode struct permet de faire la sérialization d'une structure
   */
  $syl.struct = function(data){
      /**
@@ -1529,7 +1462,9 @@ const { type } = require('os');
          object;
          $this.linkWith(structure, data.object);
          
+         
          $this.runner(function(cursor,loop){
+             
              if(_type == 'Array' || key != null){
                  loop.stop();
                  if(['[', '{'].indexOf(cursor.char) >= 0){
@@ -2589,10 +2524,8 @@ const { type } = require('os');
   */
  $syl.freeLinkOf = function(object){
      for(var i in object.following){
-         if(object.following[i] in Synthetic.Lang.objects){
-            Synthetic.Lang.objects[object.following[i]].linked--;
-            Synthetic.Lang.objects[object.following[i]].linked = Synthetic.Lang.objects[object.following[i]].linked < 0 ? 0 : Synthetic.Lang.objects[object.following[i]].linked;
-         }
+         Synthetic.Lang.objects[object.following[i]].linked--;
+         Synthetic.Lang.objects[object.following[i]].linked = Synthetic.Lang.objects[object.following[i]].linked < 0 ? 0 : Synthetic.Lang.objects[object.following[i]].linked;
      }
      return this;
  }
@@ -2779,7 +2712,6 @@ const { type } = require('os');
              name: name,
              label: "function",
              native: true,
-             async: name == 'timer',
              arguments: {},
              type: Synthetic.Lang.nativeFunctionTypes[name]
          },false);
@@ -3184,6 +3116,7 @@ const { type } = require('os');
              raise: function(){
                  $this.exception($this.err(args[0].value,true));
              },
+             
              plaform: function(){
                  var r = null;
                  return $this.toVariableStructure(r);
@@ -5532,9 +5465,7 @@ const { type } = require('os');
                         next();
                         return;
                     }
-                    // if(looptype < types.FOR){
-                        $this.garbage(true, $this.currentScope);
-                    // }
+                    // console.log('[Bien]', _currentLoop);
                     $this.currentLoop = _currentLoop;
                     $this.restoreScope(_scopeKey);
                     end();
