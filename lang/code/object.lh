@@ -1,13 +1,13 @@
 // String nom = "bien"
-String bien;
+// String bien;
 
 // Array test = [nom == "Bien" ? 30 : 10 > 3 ? "bien" : "bad", 50]
 // JSON<...> ok = { bien : "Ok" + " cool", "pardon" : 5 < 4 ? "Pardon !" : "OOh !",nom}
 
-// print 'bien' in ok
-// // debug {test,ok}
+// print('bien' in ok)
+// debug {test,ok}
 
-// ok.bien = "cool "
+// ok.bien = "cool"
 
 // ok.ok = maj "yeah !"
 
@@ -38,11 +38,8 @@ String bien;
 //     },
 //     cool: "bien"
 // }
-// {
-//     bien : int("20"),
-//     test: {
-//         index: 0
-//     }
-// }
 // print ok.fn("yeah")
 // print ok["cool"]//["index"]
+Number hexa = 0x10
+
+print hexa + "1x7"

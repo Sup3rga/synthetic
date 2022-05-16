@@ -51,7 +51,11 @@
 //     print "[NON] " + e
 // }
 for(Number i = 2; i < 5; i++){
-    print "[I] " + i
+    for Number j = i - 1; j > 0; j--{
+        print "[J] " + j
+    }
+    print ""
+    // print "[I] " + i
 }
 
 print "La boucle est finie !"
