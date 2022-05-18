@@ -6,19 +6,10 @@ class Master{
         print "Bonsoir"
     }
     Master(String nom){
-        print "Bonjour !"
-        // this.nom = nom
+        this.nom = nom
     }
-
 }
-/*
-    Master(String)
-    Master(String,String)
-    Master(String, String, Boolean)
-    Master(String,String,Boolean,Number)
 
-    Master(String)
-*/
 Master master = Master("Pierre");
 
-print master.ok
+print master.nom

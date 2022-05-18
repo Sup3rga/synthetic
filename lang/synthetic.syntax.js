@@ -2803,15 +2803,17 @@ const { type } = require('os');
  /**
   * La méthode createBlock permet de créer virtuellement un block d'attachement d'objets
  */
- $syl.createBlock = function(autoReplace){
+ $syl.createBlock = function(autoReplace, struct){
      if(!this.executing){
          return;
      }
      var scope = this.addr(),
+         struct = this.set(struct,null),
          autoReplace = this.set(autoReplace, true);
      this.modules[scope] = {
          parent: this.currentScope,
          besides: [],
+         structure: struct,
          modules: {}
      };
      if(autoReplace){
@@ -2822,54 +2824,47 @@ const { type } = require('os');
  /**
   * La méthode getCloserStruct permet de retrouver la structure (class, mixin, enum) la plus proche en parenté
   */
- $syl.getCloserStruct = function(){
-          return null;
-     var previous = this.previousCloserRef(cursor,true),
-         labels = Array.isArray(labels) ? labels : Synthetic.Lang.typeCreatorKeys,
-         object, r = null, list = {}, indexes = [];
-     /**
-      * On ne doit pas rechercher dans le scope parent actuel
-      * mais de préférence dans le scope parent du scope parent actuel
-      * Si le resultat est [0,0] on sait alors qu'on est dans la racine
-      * et qu'aucun structure n'est identifiable comme le bloc parent de l'élément actuel
-      */
-     if(previous == '0,0'){
-         return 0;
+ $syl.getCloserStruct = function(deeper){
+     var r = null,
+         deeper = this.set(deeper, false),
+         scope = this.currentScope;
+     if(!scope){
+         return r;
      }
-     else{
-         previous = this.previousCloserRef(previous.split(','), true);
-     }
-     while(!r){
-         if(previous in this.modules){
-             object = this.modules[previous];
-             for(var i in object){
-                 if(labels.indexOf(object[i].label) >= 0){
-                     list[object[i].cursor.index] = object[i];
-                     indexes.push(object[i].cursor.index * 1);
-                     r = true;
-                     break;
-                 }
-             }
-             if(r){
-                 break;
-             }
-         }
-         if(previous == '0,0'){
-             break;
-         }
-         previous = this.previousCloserRef(previous.split(','));
-     }
-     r = null;
-     indexes.sort();
-     for(var i in indexes){
-         if(cursor[1] > indexes[i]){
-             r = list[indexes[i]];
-         }
-         else{
-             break;
-         }
-     }
+     do{
+         /**
+          * On vérifie si le block en cours à une structure existant parmis les objets
+          */
+        if(this.modules[scope].structure != null && this.modules[scope].structure in Synthetic.Lang.objects){
+            r = Synthetic.Lang.objects[this.modules[scope].structure];
+            r = Synthetic.Lang.megaStructureKeys.indexOf(r.label) >= 0 ? r : null;
+            if(r){
+                r = {values: this.modules[scope].modules, object: r};
+            }
+        }
+        /**
+         * Sinon on cherche dans le block parent
+         *  * Et si le block courant n'a pas de parent, on arrête tout !
+         */
+        else{
+            scope = this.modules[scope].parent;
+            if(!scope){
+                break;
+            }
+        }
+        if(r){
+            break;
+        }
+    }while(deeper);
      return r;
+ }
+ $syl.getCurrentMegaStructure = function(){
+    var r = null;
+    if(this.currentObjectAddr && this.currentObjectAddr in Synthetic.Lang.objects){
+       r = Synthetic.Lang.objects[this.currentObjectAddr];
+       r = Synthetic.Lang.megaStructureKeys.indexOf(r.label) >= 0 ? r : null;
+    }
+    return r;
  }
  /**
   * la méthode createScopeObject 
@@ -3342,8 +3337,9 @@ const { type } = require('os');
      });
  }
  $syl.createInstance = function(classSrc){
-    var addr = this.createBlock(),
+    var addr = this.createBlock(true, classSrc.addr),
         obj,values = {};
+    // console.log('[Create]',classSrc.addr, this.currentScope);
     for(var i in classSrc.members){
         obj = Synthetic.Lang.objects[classSrc.members[i]];
         if(!obj.static){
@@ -3357,7 +3353,13 @@ const { type } = require('os');
         this.save(obj);
     }
     // console.log('[instance]',classSrc, this.modules);
-    return {key: addr, values : values, type: classSrc.type};
+    return {
+        key: addr, 
+        values : values, 
+        type: classSrc.type, 
+        scope: this.currentScope, 
+        replaceScope: null
+    };
  }
  $syl.definedUsingSignature = function(method, args){
     var list = [], $this = this, len = $this.len(args),r;
@@ -3420,10 +3422,7 @@ const { type } = require('os');
      }
      return new Promise(function(res){
          $this.toNextChar().then(function(_char){
-            
              $this.arguments(callable,ressources,true).then(function(args){
-                
-                 
                  if(!$this.executing){
                      res(null);
                  }
@@ -3484,6 +3483,13 @@ const { type } = require('os');
                              * pour ne pas briser la chaine des scopes
                              */
                             key.push($this.setScope(callable.childScope));
+                            if(instance){
+                                instance.replaceScope = {
+                                    scope: $this.currentScope,
+                                    parent: $this.modules[$this.currentScope].parent
+                                };
+                                $this.modules[$this.currentScope].parent = instance.scope;
+                            }
                             $this.createBlock();
                             callable = $this.definedUsingSignature(callable,args);
                             $this.createScopeObject(callable,args);
@@ -3502,6 +3508,7 @@ const { type } = require('os');
                                         type: instance.type,
                                         value: instance.values
                                     });
+                                    $this.modules[instance.replaceScope.scope].parent = instance.replaceScope.parent;
                                 }
                                 else{
                                     /**
@@ -4257,7 +4264,7 @@ const { type } = require('os');
          type = this.getType(),
          syntObject = $this.find(litteral),
          key = [this.saveObjectAddr()],
-         MegaScope = this.currentObjectAddr && Synthetic.Lang.megaStructureKeys.indexOf(Synthetic.Lang.objects[this.currentObjectAddr].label) >= 0 ? Synthetic.Lang.objects[this.currentObjectAddr] : null,
+         MegaScope = $this.getCurrentMegaStructure(),
          _scopeKey = [this.saveScope(true)],
          _currentObjetAddr = this.currentObjectAddr,
          forInArgSearching = $this.getStructure('currentLoop') && $this.getStructure('currentLoop').type == 'forin' && !$this.getStructure('currentLoop').argset,
@@ -4274,21 +4281,45 @@ const { type } = require('os');
              name: litteral, 
              visible: MegaScope ? !this.access.private && !this.access.protected : this.access.export,
              parent: this.set(ressources.parent,null)
-         }, !forInArgSearching),
+         }, !forInArgSearching && litteral != 'this'),
          resultValue = exist ? syntObject : null, called = false,
+         _currentObjectInUse = null,
          _cursor;
          exist = !forInArgSearching && exist && MegaScope == null;
-         /**
-          * Si la Mégastructure est static, tous ses membres doivent être aussi static
-          */
-        //   console.log('[result]',litteral,resultValue,serial);
+         
+         if(litteral == 'this'){
+            //  console.log('__[Scope]',this.currentScope);
+             _currentObjectInUse = $this.getCloserStruct(true);
+             if(!_currentObjectInUse){
+                 $this.exception($this.err("[ this ] does not point to any structure !"));
+             }
+             serial = $this.meta({
+                 type: _currentObjectInUse.object.type,
+                 label: 'object',
+                 name: 'this',
+                 value: _currentObjectInUse.values
+             },false);
+             resultValue = serial;
+             exist = $this.executing;
+            // console.log('[Block]',$this.executing,exist,$this.modules[$this.currentScope]);
+         }
+
          if(MegaScope){
+            /**
+             * Si la Mégastructure est static, tous ses membres doivent être aussi static
+             */
             if(MegaScope.static && !serial.static){
                 $this.exception($this.err("static member expected for [ "+MegaScope.name+" ], [ " +resultValue.name+" ] is not static"));
             }
+            /**
+             * Si la Mégastructure est une interface, tous ses membres doivent être aussi abstraits
+             */
             if(MegaScope.label == 'interface' && !serial.abstract){
                 $this.exception($this.err("abstract member expected for [ "+MegaScope.name+" ], [ " +resultValue.name+" ] is not abstract"));
             }
+            /**
+             * Si le constructeur d'une mégastructure ne peut pas être static
+             */
             if(litteral == MegaScope.name){
                 if(serial.static){
                     $this.exception($this.err("syntax error ! static ... "+litteral+"(...)"));
@@ -4354,7 +4385,6 @@ const { type } = require('os');
                          _cursor = $this.copy($this.cursor);
                      }
                      else{
-                         
                          /**
                           * Si l'objet exist mais pas la clé,
                           * on le prépare paresseusement pour un enregistrement
@@ -4362,6 +4392,9 @@ const { type } = require('os');
                          if((resultValue.type == 'JSON' || resultValue.implicitType == 'JSON') && exist){
                              settingKey = nextWord;
                              settingKeyObject = resultValue;
+                         }
+                         else{
+                            $this.exception($this.err("can not read value of property [ "+nextWord+" ] "));
                          }
                          resultValue = null;
                          _cursor = $this.copy($this.cursor);
@@ -4468,17 +4501,9 @@ const { type } = require('os');
                              resultValue.value = $this.calc([resultValue, cursor.char == '++' ? '+=' : '-=', $this.meta({type: 'Number', label: 'variable', value: 1})]).value;
                              $this.extend(resultValue, tmp,true);
                          }
-                         /**
-                          * Si le caractère actuel n'est pas un caractère blanc, on fait
-                          * marche arrière
-                          */
-                        
-                        
-                        
                          loop.end();
                      }
                      else{
-                         
                          $this.value({
                              object: exist ? resultValue && !settingKey ? resultValue : settingKey : serial, 
                              subvariables: false, 
@@ -4784,9 +4809,11 @@ const { type } = require('os');
                         return;
                      }
                      if(ref){
-                         
                          loop.end();
                          return;
+                     }
+                     if(resultValue == null && settingKey){
+                         $this.exception($this.err("can not read value of property [ "+settingKey+" ] "));
                      }
                     //  console.log('[Litt][End]',litteral,exist,$this.tryMethodInstead);
                      if(!exist && $this.executing && !created && resultValue == null){
@@ -4811,9 +4838,6 @@ const { type } = require('os');
                              loop.end();
                              return;
                          }
-                         
-                        
-                         
                          $this.caller(resultValue,ressources).then(function(result){
                             
                              
@@ -5235,7 +5259,8 @@ const { type } = require('os');
                      x : $this.cursor.lines.x,
                      y : $this.cursor.lines.y,
                  };
-                 $this.createBlock();
+                 $this.createBlock(true,serial.addr);
+                 console.log('[class]',serial.addr);
                  loop.stop();
                  $this.goTo(1);
                  $this.parse($this.extend(ressources,{
@@ -5245,12 +5270,19 @@ const { type } = require('os');
                  }).then(function(){
                      $this.restoreScope(_scopeKey);
                      $this.restoreObjectAddr(_addrKey);
-                     console.log('[Serial]',$this.currentObjectAddr);
                      loop.end();
                  });
              }
          }).then(function(){
              resolve();
+         })
+     });
+ }
+ $syl.this = function(ressources){
+     var $this = this;
+     return new Promise(function(res){
+         $this.litteral('this', ressources).then(function(result){
+            res(result);
          })
      });
  }
