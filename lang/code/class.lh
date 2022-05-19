@@ -5,11 +5,18 @@ class Master{
     Master(){
         print "Bonsoir"
     }
-    Master(String nom){
-        this.nom = nom
+    Master(String noms){
+        nom = noms
+        // print "[Nom] " + this.nom
+    }
+    
+    Any sePresenter(){
+        print "Hello everyone ! I'm " + this.nom
     }
 }
 
 Master master = Master("Pierre");
-
-print master.nom
+master.sePresenter()
+// mister.sePresenter()
+// print master.nom
+// print mister.nom

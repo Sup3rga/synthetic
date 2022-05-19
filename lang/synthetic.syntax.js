@@ -463,15 +463,13 @@ const { type } = require('os');
          linked: 0,
          following: [],
          parentScope: this.currentScope
-     }, options),
+     }, options, true),
      autosave = this.set(autosave,true);
      result.implicitType = result.implicitType == null ? result.type : result.implicitType;
      this.resetAccess();
      this.currentType = null;
      this.previousReason = null;
      this.currentSwitchReference = null;
-     
-     
      if(autosave) this.save(result);
      return result;
  }
@@ -2145,6 +2143,21 @@ const { type } = require('os');
                                 $this.exception($this.err("[ "+result.name+" ] can not be linked as value !"),true);
                             }
                          });
+                         return;
+                     }
+                     else if(cursor.word == 'this'){
+                         loop.stop();
+                         $this.litteral(cursor.word, data.ressources).then(function(result){
+                            if(['--','++'].indexOf($this.code.substr($this.cursor.index - 3, 2)) >= 0){
+                                values.push($this.toVariableStructure(result.value * 1 - 1));
+                            }
+                            else{
+                                values.push(result);
+                            }
+                            waitingForNextOperand = false;
+                            loop.start();
+                         });
+                         return;
                      }
                      else{
                          $this.exception($this.err("invalid syntax !"),true);
@@ -2163,6 +2176,7 @@ const { type } = require('os');
                      if(preOperations >= 0 && $this.executing){
                          
                          if(type != 'Number' && preOperations != Synthetic.Lang.simpleOperations.REVERSE){
+                             console.log('[Word]',cursor.word, preOperations)
                              $this.exception($this.err("Number value expected"));
                          }
                          cursor.word = parseFloat(cursor.word);
@@ -2831,6 +2845,8 @@ const { type } = require('os');
      if(!scope){
          return r;
      }
+    //  if(this.executing)
+    //      console.log('[Begin]',scope, this.modules)
      do{
          /**
           * On vérifie si le block en cours à une structure existant parmis les objets
@@ -2839,6 +2855,7 @@ const { type } = require('os');
             r = Synthetic.Lang.objects[this.modules[scope].structure];
             r = Synthetic.Lang.megaStructureKeys.indexOf(r.label) >= 0 ? r : null;
             if(r){
+                // console.log('[Addr]',scope)//,this.modules[scope].modules);
                 r = {values: this.modules[scope].modules, object: r};
             }
         }
@@ -3338,27 +3355,37 @@ const { type } = require('os');
  }
  $syl.createInstance = function(classSrc){
     var addr = this.createBlock(true, classSrc.addr),
-        obj,values = {};
-    // console.log('[Create]',classSrc.addr, this.currentScope);
+        obj,values = {}, surchages;
+    // console.log('[Create]', this.currentScope);
     for(var i in classSrc.members){
         obj = Synthetic.Lang.objects[classSrc.members[i]];
         if(!obj.static){
             obj = this.copy(obj);
             obj.addr = this.addr();
             obj.parent = this.currentScope;
-        }
-        if(obj.visible){
-            values[i] = obj;
+            if(this.isCallable(obj)){
+                for(var i in obj.signatures){
+                    surchages = this.copy(Synthetic.Lang.objects[obj.signatures[i]]);
+                    surchages.addr = this.add();
+                    surchages.parent = this.currentScope;
+                    this.save(surchages);
+                    obj.signatures[i] = surchages.addr;
+                }
+            }
         }
         this.save(obj);
+        if(obj.visible){
+            // console.log('[create][obj]',obj.name, 'exist=>', Synthetic.Lang.objects[obj.addr] == obj);
+            values[i] = obj;
+        }
     }
     // console.log('[instance]',classSrc, this.modules);
     return {
-        key: addr, 
         values : values, 
         type: classSrc.type, 
         scope: this.currentScope, 
-        replaceScope: null
+        replaceScope: null,
+        instanciation: true
     };
  }
  $syl.definedUsingSignature = function(method, args){
@@ -3417,8 +3444,21 @@ const { type } = require('os');
          instance = null;
      if(callable.label == 'class'){
          instance = $this.createInstance(callable);
-         key.push($this.setScope(instance.key));
+         key.push($this.setScope(instance.scope));
          callable = callable._constructor;
+     }
+     else if(callable.parent in this.modules){
+         if(this.modules[callable.parent].structure in Synthetic.Lang.objects){
+             var megastruct = Synthetic.Lang.objects[this.modules[callable.parent].structure];
+             instance = {
+                values : {}, 
+                type: megastruct.type, 
+                scope: callable.parent, 
+                replaceScope: null,
+                instanciation: false
+             }
+         }
+        //  console.log('[GOT]',callable,callable.parent);
      }
      return new Promise(function(res){
          $this.toNextChar().then(function(_char){
@@ -3482,16 +3522,18 @@ const { type } = require('os');
                              * lorsqu'on va créer le scope suivant comme actuel
                              * pour ne pas briser la chaine des scopes
                              */
+                            callable = $this.definedUsingSignature(callable,args);
                             key.push($this.setScope(callable.childScope));
                             if(instance){
                                 instance.replaceScope = {
                                     scope: $this.currentScope,
                                     parent: $this.modules[$this.currentScope].parent
                                 };
+                                // console.log('[_____scope_____]',callable.name,$this.currentScope, instance.scope);
                                 $this.modules[$this.currentScope].parent = instance.scope;
                             }
                             $this.createBlock();
-                            callable = $this.definedUsingSignature(callable,args);
+                            // console.log('[NEXT]',callable.name,$this.currentScope);
                             $this.createScopeObject(callable,args);
                             $this.cursor = $this.copy(callable.scopeCursor);
                             $this.parse({
@@ -3502,13 +3544,16 @@ const { type } = require('os');
                             }).then(function(response){
                                 $this.setExecutionMod(true);
                                 $this.restoreScope(key);
-                                if(instance){
+                                if(instance && instance.instanciation){
                                     response = $this.meta({
                                         name: null,
                                         type: instance.type,
                                         value: instance.values
                                     });
-                                    $this.modules[instance.replaceScope.scope].parent = instance.replaceScope.parent;
+                                    // console.log('[return][exec]',$this.executing);
+                                    // for(var i in response.value){
+                                    //     console.log('[return]', i, Synthetic.Lang.objects[response.value[i].addr] == response.value[i]);
+                                    // }
                                 }
                                 else{
                                     /**
@@ -3521,6 +3566,9 @@ const { type } = require('os');
                                     if(!$this.isValidateConstraint(response, callable.type)){
                                         $this.exception($this.err(" "+callable.type+" expected, "+response.type+" given"));
                                     }
+                                }
+                                if(instance){
+                                    $this.modules[instance.replaceScope.scope].parent = instance.replaceScope.parent;
                                 }
                                 $this.cursor = $this.copy(cursor);
                                 /**
@@ -3644,12 +3692,6 @@ const { type } = require('os');
                  }).then(function(result){
                      /**
                       * On doit déléguer les type si c'est une fonction
-                      */
-                     
-                     
-                     
-                     
-                     
                      /**
                       * S'il y a contraint 'callable' de label sur l'argument
                       * pn verifie qu'il reçoit bien un callable ('external', 'function')
@@ -3855,19 +3897,6 @@ const { type } = require('os');
                  }
                  else{
                      _reachCursor = $this.copy($this.cursor);
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                        
                         /**
                          * On cherche à savoir si le litteral actuel est un Type
                          */
@@ -4301,7 +4330,7 @@ const { type } = require('os');
              },false);
              resultValue = serial;
              exist = $this.executing;
-            // console.log('[Block]',$this.executing,exist,$this.modules[$this.currentScope]);
+            // console.log('[Block]',_curr,$this.modules[$this.currentScope]);
          }
 
          if(MegaScope){
@@ -4417,7 +4446,6 @@ const { type } = require('os');
                  if(cursor.word && cursor.word.length && !dotted){
                      $this.cursor = _cursor;
                  }
-                 
                  if(['=','+=','-=','/=','*=','~=', '--', '++'].indexOf(cursor.char) >= 0){
                      /**
                       * Si on recherche des arguments pour la boucle for ... in
@@ -4479,9 +4507,6 @@ const { type } = require('os');
                      if(exist && cursor.char == '=' && resultValue && ( resultValue.constant || resultValue.final ) ){
                          $this.exception($this.err("cannot override [ "+litteral+" ] declared previously as "+(resultValue.constant ? 'constant' : 'final')+" !"));
                      }
-                    
-                    
-                    
                      /**
                       * On doit donner à la variable la clé 'value' pour ne pas être supprimée
                       * Si on est entrain de la créer
@@ -4511,7 +4536,12 @@ const { type } = require('os');
                              ternary: false,
                              end: assignType != null ? [Synthetic.Lang.constants._EOS.COMA] : []
                          }).then(function(result){
-                            
+                            // if(MegaScope == null && result && !exist){
+                            //    console.log('[Exist]',$this.executing,litteral);
+                            //    for(var i in result.value){
+                            //        console.log('[For]',i, 'exist->', Synthetic.Lang.objects[result.value.addr] == result.value)
+                            //    }
+                            // }
                              if($this.code[$this.cursor.index-1] == ','){
                                  $this.currentType = assignType;
                              }
@@ -4563,28 +4593,17 @@ const { type } = require('os');
                                          visible : resultValue.visible,
                                          addr: resultValue.addr
                                      };
-                                     
                                      if(cursor.char != '='){
                                          result = $this.calc([resultValue, cursor.char, result]);
-                                         
-                                         
                                      }
-                                     
-                                         
-                                         $this.extend(resultValue, result,true);
-                                         
-                                         $this.extend(resultValue, tmp,true);
-                                         
-                                         
-                                         
-                                     
+                                    $this.extend(resultValue, result,true);
+                                    $this.extend(resultValue, tmp,true);
                                  }
                              }
                              else{
                                  if($this.executing){
                                      delete serial.value;
-                                     $this.extendElse(serial, result);
-                                     
+                                     $this.extendElse(serial,result);
                                      if(!result){
                                          $this.exception($this.err("previous syntax error detected !"));
                                      }
@@ -5194,7 +5213,7 @@ const { type } = require('os');
      return new Promise(function(resolve, reject){
          $this.read(filename).then(function(){
              $this.parse().then(function(){
-                 
+                //  console.log('[Modules]',$this.modules[$this.rootScope].modules.master, Synthetic.Lang.objects);
                  resolve($this);
              }).catch(function(e){
                  reject(e);
@@ -5260,7 +5279,7 @@ const { type } = require('os');
                      y : $this.cursor.lines.y,
                  };
                  $this.createBlock(true,serial.addr);
-                 console.log('[class]',serial.addr);
+                //  console.log('[class]',serial.addr);
                  loop.stop();
                  $this.goTo(1);
                  $this.parse($this.extend(ressources,{
