@@ -2210,7 +2210,7 @@ const { type } = require('os');
                   * Il faut vérifier d'abord que le signe n'est pas un EOS
                   * par exemple: le cas de ":"
                   */
-                  if(data.end.indexOf(_end) >= 0){
+                if(data.end.indexOf(_end) >= 0){
                      loop.end();
                      return;
                  }
@@ -2410,14 +2410,31 @@ const { type } = require('os');
                               * Il se pourrait bien qu'on a tenté une fonction
                               */
                              $this.toNextChar().then(function(_char){
- 
+                                 /**
+                                  * @Cas exceptionnel
+                                  * Ça peut arriver qu'une sous-valeur en mode non-exécution
+                                  * génère une methodInstead alors qu'on cherchait un ternaire
+                                  */
+                                 if(_char == '?'){
+                                    $this.tryMethodInsteadConfirmed = false;
+                                    $this.tryMethodInstead = _tryMethod;
+                                    $this.ternary({
+                                        object: data.object,
+                                        end: data.end,
+                                        ressources: data.ressources,
+                                        reason: false
+                                    }).then(function(result){
+                                        values.push($this.executing ? result : $this.toVariableStructure(result));
+                                        waitingForNextOperand = false;
+                                        loop.start();
+                                    });
+                                    return;
+                                 }
                                  if((!result && $this.tryMethodInsteadConfirmed) || _char == '{'){
-                                     
                                      $this.cursor = $this.copy(_cursor);
                                      $this.tryMethodInsteadConfirmed = false;
                                      $this.tryMethodInstead = _tryMethod;
                                      $this.method(data.object, data.ressources).then(function(method){
-                                         
                                          values.push(data.object);
                                          waitingForNextOperand = false;
                                          $this.garbage(true);
@@ -2464,12 +2481,6 @@ const { type } = require('os');
                          });
                      }
                      /**
-                      * Si c'est une fonction, on l'appelle comme un littéral
-                      */
-                     
-                         
-                     
-                     /**
                       * Sinon on déclenche une erreur
                       */
                      else{
@@ -2493,10 +2504,11 @@ const { type } = require('os');
              var r = $this.executing ? $this.calc(values) : null;
              if($this.executing && !data.subvariables && !data.subvalue && data.object.type != 'Any' && (!r || (r.type != data.object.type && r.implicitType != data.object.type)) ){
                  
-                 if(!r || !('labelConstraint' in r && r.labelConstraint == 'callable' && r.label == 'function')){
+                 if(!$this.getStructure('currentInstance') && (!r || !('labelConstraint' in r && r.labelConstraint == 'callable' && r.label == 'function'))){
                      if(_cursor){
                         $this.cursor = $this.copy(_cursor);
                      }
+                    //  console.log('[Data]',data.object);
                      $this.exception($this.err(data.object.type+" value expected, "+(r ? r.implicitType : "Any" )+" given !"));
                  }
              }
@@ -2505,11 +2517,6 @@ const { type } = require('os');
                      $this.exception($this.err($this.toStringTypes(data.object.constraints.value)+" value expected, "+(!r ? "Any" : r.type)+" given !"));
                  }
              }
-             
-             
-             
-             
-             
              $this.garbage();
              res(r);
          })
@@ -3363,15 +3370,15 @@ const { type } = require('os');
             obj = this.copy(obj);
             obj.addr = this.addr();
             obj.parent = this.currentScope;
-            if(this.isCallable(obj)){
-                for(var i in obj.signatures){
-                    surchages = this.copy(Synthetic.Lang.objects[obj.signatures[i]]);
-                    surchages.addr = this.add();
-                    surchages.parent = this.currentScope;
-                    this.save(surchages);
-                    obj.signatures[i] = surchages.addr;
-                }
-            }
+            // if(this.isCallable(obj)){
+            //     for(var i in obj.signatures){
+            //         surchages = this.copy(Synthetic.Lang.objects[obj.signatures[i]]);
+            //         surchages.addr = this.addr();
+            //         surchages.parent = this.currentScope;
+            //         this.save(surchages);
+            //         obj.signatures[i] = surchages.addr;
+            //     }
+            // }
         }
         this.save(obj);
         if(obj.visible){
@@ -3407,12 +3414,15 @@ const { type } = require('os');
         }
         return r;
     }
+    if(!method.signatures.length){
+        return method;
+    }
     compatible(method,args);
     for(var i in method.signatures){
         compatible(Synthetic.Lang.objects[method.signatures[i]]);
     }
     if(!list.length){
-        r = method;
+        r = null;
     }
     else{
         var argLen = {
@@ -3441,7 +3451,9 @@ const { type } = require('os');
       * On sauvegarde le scope actuel pour le restaurer plus tard
       */
      var key = [$this.saveScope(true)],
-         instance = null;
+         instance = null,
+         _instanceKey = [],
+         _cursor = $this.copy($this.cursor);
      if(callable.label == 'class'){
          instance = $this.createInstance(callable);
          key.push($this.setScope(instance.scope));
@@ -3460,9 +3472,13 @@ const { type } = require('os');
          }
         //  console.log('[GOT]',callable,callable.parent);
      }
+     if(instance){
+        _instanceKey.push($this.setStructure('currentInstance', instance)[1]);
+     }
      return new Promise(function(res){
          $this.toNextChar().then(function(_char){
              $this.arguments(callable,ressources,true).then(function(args){
+                 $this.restoreStructure('currentInstance',_instanceKey);
                  if(!$this.executing){
                      res(null);
                  }
@@ -3496,7 +3512,7 @@ const { type } = require('os');
                          });
                      }
                      else{
-                        if(!callable){
+                        if(!callable && instance && instance.instanciation){
                             $this.setExecutionMod(true);
 
                             // response = $this.toVariableStructure(response,ressources);
@@ -3522,7 +3538,16 @@ const { type } = require('os');
                              * lorsqu'on va créer le scope suivant comme actuel
                              * pour ne pas briser la chaine des scopes
                              */
+                            var defaultCallable = callable;
                             callable = $this.definedUsingSignature(callable,args);
+                            if(!callable){
+                                var types = '';
+                                for(var i in args){
+                                    types += (types.length ? ', ' : '')+args[i].type;
+                                }
+                                $this.cursor = $this.copy(_cursor);
+                                $this.exception($this.err("undefined method signature like "+ (instance ? instance.type+'.' : '') +defaultCallable.name+"("+types+") !"));
+                            }
                             key.push($this.setScope(callable.childScope));
                             if(instance){
                                 instance.replaceScope = {
@@ -3615,10 +3640,12 @@ const { type } = require('os');
                  type: 'Any',
                  implicitType: 'Any',
                  value: null,
+                 altype: [],
                  unset: false,
                  callable: false,
                  external: false,
-                 constant: false
+                 constant: false,
+                 autoassign: false
              },false),_r;
              if(calling){
                  _r = getArg(index);
@@ -3776,19 +3803,16 @@ const { type } = require('os');
          }
          function saveArgument(cursor,loop){
              return new Promise(function(_res,_rej){
-                
-                 
+                //  console.log('[cursor]',cursor,calling);
                  if(calling && cursor.char != ':' && cursor.word && typeof cursor.word != 'object'){
-                    
+                    //  console.log('[Search]',cursor.word, $this.executing);
                      $this.cursor = $this.copy(_cursor);
-                    
-                    
                      $this.value({
                          object: arg,
                          ressources: ressources,
                          end: [Synthetic.Lang.constants._EOS.COMA, Synthetic.Lang.constants._EOS.PARENTHESE]
                      }).then(function(result){
-                        
+                        // console.log('[Result]',result);
                          /**
                           * S'il y a contraint 'callable' de label sur l'argument
                           * pn verifie qu'il reçoit bien un callable ('external', 'function')
@@ -3888,6 +3912,36 @@ const { type } = require('os');
                                      });
                                  });
                              });
+                             return;
+                         }
+                     }
+                     else if(cursor.word == 'this'){
+                         if(calling){
+                             loop.stop();
+                             $this.litteral(cursor.word,ressources).then(function(result){
+                                $this.toNextChar().then(function(_char){
+                                    saveArgument({char:_char, word: result}, loop).then(function(){
+                                        _cursor = $this.copy($this.cursor);
+                                        loop.start();
+                                    });
+                                });
+                             });
+                             return;
+                         }
+                         else{
+                             loop.stop();
+                            //  $this.litteral(cursor.word,ressources).then(function(result){
+                            //      console.log('[Result]',result,arg);
+                            //      result = $this.extendElse($this.copy(result),arg);
+                            //      arg = result;
+                            //     $this.toNextChar().then(function(_char){
+                            //         saveArgument({char:_char, word: result}, loop).then(function(){
+                            //             _cursor = $this.copy($this.cursor);
+                            //             loop.start();
+                            //         });
+                            //     });
+                            //  });
+                             console.log('[FIX] THIS !!!');
                              return;
                          }
                      }
@@ -4837,9 +4891,15 @@ const { type } = require('os');
                     //  console.log('[Litt][End]',litteral,exist,$this.tryMethodInstead);
                      if(!exist && $this.executing && !created && resultValue == null){
                          if($this.tryMethodInstead){
-                             resultValue = null;
-                             $this.garbage(true);
-                             $this.tryMethodInsteadConfirmed = true;
+                            console.log('[Litt]',litteral);
+                             if($this.executing){
+                                resultValue = null;
+                                $this.garbage(true);
+                                $this.tryMethodInsteadConfirmed = true;
+                             }
+                             else{
+                                 resultValue = $this.toVariableStructure(null);
+                             }
                              loop.end();
                              return;
                          }

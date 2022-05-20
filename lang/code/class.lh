@@ -5,18 +5,30 @@ class Master{
     Master(){
         print "Bonsoir"
     }
-    Master(String noms){
-        nom = noms
-        // print "[Nom] " + this.nom
+    Master(String nom){
+        this.nom = nom
     }
+    // Master(this.nom);
     
-    Any sePresenter(){
-        print "Hello everyone ! I'm " + this.nom
+    Any sePresenter(String prenom){
+        print "Hello everyone ! I'm " + nom + " - " + prenom
+    }
+    Any sePresenter(Boolean cap : false){
+        if cap {
+            print "Hello, I'm " + maj nom
+        }
+        else {
+            print "Hello, I'm just " + nom
+        }
+    }
+    Any sePresenter(Boolean test : false, Boolean cap : true){
+        print "Hello !"
     }
 }
 
-Master master = Master("Pierre");
-master.sePresenter()
-// mister.sePresenter()
+Master master = Master("Pierre"),
+       mister = Master("Jhon");
+// mister.sePresenter(prenom : true,true)
+// master.sePresenter()
 // print master.nom
 // print mister.nom
