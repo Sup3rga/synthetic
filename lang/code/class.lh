@@ -10,9 +10,14 @@ class Master{
     }
     // Master(this.nom);
     
+    Any sePresenter(){
+        print "Hello !"
+    }
+    
     Any sePresenter(String prenom){
         print "Hello everyone ! I'm " + nom + " - " + prenom
     }
+
     Any sePresenter(Boolean cap : false){
         if cap {
             print "Hello, I'm " + maj nom
@@ -21,14 +26,15 @@ class Master{
             print "Hello, I'm just " + nom
         }
     }
-    Any sePresenter(Boolean test : false, Boolean cap : true){
+    Any sePresenter(Boolean test : false, Boolean prenom){
         print "Hello !"
     }
 }
 
 Master master = Master("Pierre"),
        mister = Master("Jhon");
-// mister.sePresenter(prenom : true,true)
+        
+mister.sePresenter(false, false)
 // master.sePresenter()
 // print master.nom
 // print mister.nom

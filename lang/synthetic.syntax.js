@@ -3013,6 +3013,11 @@ const { type } = require('os');
  $syl.isType = function(object){
     return Synthetic.Lang.typeCreatorKeys.indexOf(object.label) >= 0;
  }
+ $syl.isTypesEqual = function(type1,type2){
+    var r = type1.type == type2.type || type1.implicitType == type2.implicitType || 
+            type1.type == type2.implicitType || type1.implicitType == type2.type;
+    return r;
+ }
  /**
   * @SECTOR : execution
   */
@@ -3422,7 +3427,7 @@ const { type } = require('os');
         compatible(Synthetic.Lang.objects[method.signatures[i]]);
     }
     if(!list.length){
-        r = null;
+        r = !$this.len(args) ? method : null;
     }
     else{
         var argLen = {
@@ -3441,6 +3446,17 @@ const { type } = require('os');
         }
     }
     return r;
+ }
+ $syl.getSignature = function(method, index){
+     var r = null;
+     if(!index){
+        r = method;
+     }
+     else{
+       r = method.signatures[index * 1 - 1];
+       r = typeof r == 'string' ? Synthetic.Lang.objects[r] : null;
+     }
+     return r;
  }
  /**
   * La méthode caller
@@ -3487,7 +3503,7 @@ const { type } = require('os');
                       * Conséquence d'un argument ayant le même nom qu'une fonction définie
                       * alors qu'on le crée dans les paramètres d'un callback
                       */
-                     if(!args){
+                     if(!args.arguments){
                          /**
                           * Si le resultat des arguments est nul on va vérifier:
                           *  * Si 'trynMethodeInstead' est activé, dans ce cas on prendra en compte
@@ -3539,7 +3555,10 @@ const { type } = require('os');
                              * pour ne pas briser la chaine des scopes
                              */
                             var defaultCallable = callable;
-                            callable = $this.definedUsingSignature(callable,args);
+                            callable = $this.getSignature(callable, args.signature);
+                            args = args.arguments;
+                            console.log('[Callable]',args);
+                            // $this.definedUsingSignature(callable,args);
                             if(!callable){
                                 var types = '';
                                 for(var i in args){
@@ -3617,21 +3636,43 @@ const { type } = require('os');
          calling = $this.set(calling, false);
      return new Promise(function(res){
          var _arguments = {}, _typeset = false,
+             _instance = $this.getStructure('currentInstance'),
              arg, index = 0, _cursor, _reachCursor, _arg,
-             withParenthese = 0, callCertitude = 0;
+             withParenthese = 0, callCertitude = 0,
+             arglist = {};
          if(calling){
-             
+             arglist[0] = serial.arguments;
+             for(var i in serial.signatures){
+                 arglist[i*1+1] = Synthetic.Lang.objects[serial.signatures[i]].arguments;
+             }
+         }
+         function argName(name,clear,types){
+            var r = null,
+                types = $this.set(types,null),
+                list = [];
+            for(var i in arglist){
+                if(name in arglist[i]){
+                    r = arglist[i][name];
+                    list.push(i);
+                }
+                else if(clear){
+                    delete arglist[i];
+                }
+            }
+            return r;
          }
          function getArg(n,notNull){
-             notNull = $this.set(notNull,false)
-             for(var i in serial.arguments){
-                 if(serial.arguments[i].index == n){
-                     return $this.copy(serial.arguments[i],true);
-                 }
-                 if(serial.arguments[i].name == n){
-                     return $this.copy(serial.arguments[i],true);
-                 }
-             }
+             notNull = $this.set(notNull,false);
+             if(!_instance){
+                for(var i in serial.arguments){
+                    if(serial.arguments[i].index == n){
+                        return $this.copy(serial.arguments[i],true);
+                    }
+                    if(serial.arguments[i].name == n){
+                        return $this.copy(serial.arguments[i],true);
+                    }
+                }
+            }
              return notNull ? {} : null;
          }
          function resetArg(){
@@ -3698,7 +3739,7 @@ const { type } = require('os');
                      console.log('[Cursor]',cursor.word);
                      $this.exception($this.err("syntax error withing parenthesisless calling style function !"),true);
                  }
-                 if(calling && !(cursor.word in serial.arguments)){
+                 if(calling && !argName(cursor.word,true)){
                      $this.exception($this.err("[ "+cursor.word+" ] is not a defined argument for "+serial.name+" !"));
                  }
                  _arg = getArg(cursor.word);
@@ -3775,8 +3816,6 @@ const { type } = require('os');
                  if(callCertitude){
                      $this.goTo(1);
                  }
-                 
-                 
                  loop.end();
              }
              else{
@@ -4080,19 +4119,68 @@ const { type } = require('os');
              
              if(calling){
                  arg = {};
-                 
+                //  console.log('[_Arguments]',_arguments,arglist);
+                 /**
+                  * Parcourir la liste des arguments d'appel pour les comparer avec ceux
+                  * des signatures pour voir s'il en existe de compatiblité
+                  */
+                 var arglen = {
+                     saved: -1,
+                     current: 0
+                 }, signature = -1, byName,pass = [];
+                 for(var i in _arguments){
+                     compatible = true;
+                     byName = !/^[0-9]+$/.test(i);
+                     index = !byName ? i * 1 : _arguments[i].index;
+                     pass = [];
+                    for(var j in arglist){
+                        for(var k in arglist[j]){
+                            if(
+                                (byName && k == j) || 
+                                (!byName && arglist[j][k].index == index) 
+                            ){
+                                if($this.isTypesEqual(_arguments[i], arglist[j][k])){
+                                    compatible = true;
+                                }
+                                else{
+                                    pass.push(j);
+                                }
+                            }
+                            else{
+                                compatible = true;
+                            }
+                        }
+                    }
+                    for(var j in pass){
+                        delete arglist[pass[j]];
+                    }
+                 }
+                 /**
+                  * Récupération de la signature
+                  */
+                 for(var i in arglist){
+                     arglen.current = $this.len(arglist[i]);
+                     if(arglen.current > arglen.saved){
+                        signature = i;
+                        arglen.saved = arglen.current;
+                     }
+                 }
+                 serial = signature >= 0 ? arglist[signature] : null;
+                //  console.log('[At][end]', arglist,signature);
+                 index = 0;
                  for(var i in _arguments){
                      if(/^[0-9]+$/.test(i)){
                          arg[i] = _arguments[i];
+                         index = i * 1 + 1;
                      }
                      else{
-                         
-                         arg[serial.arguments[i].index] = _arguments[i];
+                        //  console.log('[I]',i, _arguments[i], argName(i,false,[{type: _arguments[i].implicitType}]));
+                         arg[signature ? serial[i].index : index] = _arguments[i];
                      }
                  }
                  if($this.executing){
-                     for(var i in serial.arguments){
-                         if(serial.arguments[i].unset && !(serial.arguments[i].index in arg) ){
+                     for(var i in serial){
+                         if(serial[i].unset && !(serial[i].index in arg) ){
                              $this.exception($this.err("argument [ "+serial.arguments[i].name+" ] has no value set !"));
                          }
                      }
@@ -4108,7 +4196,7 @@ const { type } = require('os');
                  res(null);
                  return;
              }
-             res(_arguments);
+             res(calling ? {signature : signature, arguments: _arguments} : _arguments);
          });
      });
  }
