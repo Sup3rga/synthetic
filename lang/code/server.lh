@@ -1,7 +1,6 @@
 import sserv
 
-sserv
-.on("get", "/", (HttpRequest req, Client client){
+sserv.on("get", "/", (HttpRequest req, Client client){
     client.receive "Hello " + req.name
 })
 

@@ -1,4 +1,4 @@
-class Master{
+const class Master{
     String nom = "Jean";
     private Boolean ok = false;
     
@@ -29,12 +29,15 @@ class Master{
     Any sePresenter(Boolean test : false, Boolean prenom){
         print "Hello !"
     }
+    Any sePresenter(Boolean test : false, Boolean prenom, Boolean ok){
+        print "Hello second !"
+    }
 }
 
 Master master = Master("Pierre"),
        mister = Master("Jhon");
-        
-mister.sePresenter(false, false)
+    
+mister.sePresenter(false,"Ok !", false)
 // master.sePresenter()
 // print master.nom
 // print mister.nom
