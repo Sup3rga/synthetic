@@ -1,18 +1,22 @@
 const class Master{
-    String nom = "Jean";
+    private String nom = "Jean";
     private Boolean ok = false;
     
     Master(){
         print "Bonsoir"
     }
-    Master(String nom){
-        this.nom = nom
+    Master(String _nom){
+        this.nom = _nom
     }
     // Master(this.nom);
     
     Any sePresenter(){
-        print "Hello !"
+        print "Hello ! default " + this.nom
     }
+
+    setNom(String noms) this.nom = noms
+
+    getNom() return nom
     
     Any sePresenter(String prenom){
         print "Hello everyone ! I'm " + nom + " - " + prenom
@@ -37,7 +41,19 @@ const class Master{
 Master master = Master("Pierre"),
        mister = Master("Jhon");
     
-mister.sePresenter(false,"Ok !", false)
+master.setNom("Julien")
+// master.sePresenter(false,"Ok !", false)
+master.sePresenter(50)
 // master.sePresenter()
+
+print(master.getNom(),"-",mister.getNom())
 // print master.nom
 // print mister.nom
+
+static class Maitre{
+    static test(){
+        print "Ceci est une classe !"
+    }
+}
+
+Maitre.test()

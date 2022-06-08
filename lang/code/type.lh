@@ -1,0 +1,3 @@
+Any test = 50;
+
+print typeof test

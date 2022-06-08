@@ -1,6 +1,3 @@
-const { exec } = require('child_process');
-const { type } = require('os');
-
 /**
  * @auteur: Superga
  * @version: 8.0.0
@@ -22,7 +19,7 @@ const { type } = require('os');
      ],
      valuableReservedKeys: ['return'],
      lazyKeys : ['import', 'from', 'include'],
-     baseType : ['Any', 'String', 'Number', 'JSON', 'Array', 'Boolean', 'Regex', 'Function', 'External', "SML"],
+     baseType : ['Object','Any', 'String', 'Number', 'JSON', 'Array', 'Boolean', 'Regex', "SML"],
      breakableKeys : ['return', 'break'],
      scopeSniper: ['root', 'upper'],
      callAsMethodKeys : ['mixin', 'function'],
@@ -46,7 +43,7 @@ const { type } = require('os');
          "out": "Any", "print" : "Any", "timer": "Any", "jsExec": "Any", "raise": "Any",
          "pop": "Any", "shift": "Any", "split": "Array", "sort": "Array", "reverse": "Array",
          "filter": "Array", "join": "String", "platform": "String", "tap" : "String",
-         "push": "Any"
+         "push": "Any","debug": "Any"
      },
      definedTypes: [],
      blockEOS : ['}',')'],
@@ -100,7 +97,16 @@ const { type } = require('os');
          2: 'String',
          3: 'Number',
          4: 'Boolean',
-         5: 'Regex'
+         5: 'Regex',
+         Any: 'Any',
+         String: 'String',
+         Number: 'Number',
+         Boolean: 'Boolean',
+         Regex: 'Regex',
+         Array: 'Array',
+         JSON: 'JSON',
+         Object: 'Object',
+         SML: 'SML'
      },
      simpleOperations: {
          POSITIVE: 0,
@@ -172,7 +178,8 @@ const { type } = require('os');
      * On va définir les types de bases en étant des objects synthetic
      * si ce n'est pas encore fait
      */
-     var r, defineBase = typeof Synthetic.Lang.baseType[0] == 'string';
+     var r, defineBase = typeof Synthetic.Lang.baseType[0] == 'string',
+         objectaddr;
      for(var i in Synthetic.Lang.baseType){
          r = typeof Synthetic.Lang.baseType[i] == 'object' ?
              Synthetic.Lang.baseType[i] :
@@ -184,13 +191,18 @@ const { type } = require('os');
                  visible: true,
                  origin: null,
                  callable: false,
+                 supertypes: objectaddr ? [objectaddr] : [],
                  value: {
                      type: this.meta({
+                         type: Synthetic.Lang.baseType[i],
                          label: 'type',
                          value: Synthetic.Lang.baseType[i]
                      },false)
                  }
              });
+         if(Synthetic.Lang.baseType[i] == 'Object'){
+            objectaddr = r.addr;
+         }
          if(defineBase){
              Synthetic.Lang.baseType[i] = r;
          }
@@ -198,6 +210,11 @@ const { type } = require('os');
              this.save(r);
          }
          this.types.push(r.name);
+     }
+     if(defineBase){
+         for(var i in Synthetic.Lang.typeFromConstants){
+             Synthetic.Lang.typeFromConstants[i] = this.getBaseType(Synthetic.Lang.typeFromConstants[i]);
+         }
      }
  }
  
@@ -218,6 +235,9 @@ const { type } = require('os');
      Synthetic.Lang.definedAddr.push(r);
      return r;
  }
+ $syl.isAddr = function(val){
+    return /^0x[a-z0-9]+$/.test(val);
+ }
  /**
   * la méthode isset permet de savoir si une variable est définie ou non
   */
@@ -229,19 +249,6 @@ const { type } = require('os');
   */
  $syl.set = function(e, v, s){
      return this.isset(s) ? (e ? this.isset(v) ? v : null : this.isset(s) ? s : null) : (this.isset(e) ? e : this.isset(v) ? v : null);
- }
- /**
-  * La méthode isBaseType permet de définir si un type est un type de base
-  */
- $syl.isBaseType = function(type){
-     var r = false;
-     for(var i in Synthetic.Lang.baseType){
-         if(type == Synthetic.Lang.baseType[i].type){
-             r = true;
-             break;
-         }
-     }
-     return r;
  }
  /**
   * La méthode garbage pemet de nettoyer le stockage inutile des variables
@@ -445,12 +452,13 @@ const { type } = require('os');
              scope: this.cursor.scope,
              index : this.cursor.index
          },
-         type: 'Any', 
+         type: Synthetic.Lang.typeFromConstants.Any.addr, 
          implicitType: null,
          labelConstraint: null,
          typeOrigin: null,
          constraints: null,
          native: false,
+         static: false,
          async: false,
          final: this.access.final,
          constant: this.access.const,
@@ -458,7 +466,7 @@ const { type } = require('os');
          label: null, 
          name: null, 
          visible: this.access.export, 
-         origin: null,
+         origin: this.file,
          addr: this.addr(),
          linked: 0,
          following: [],
@@ -711,7 +719,9 @@ const { type } = require('os');
          until();
      });
  };
- 
+ /**
+  * La méthode wait permet de parcourir une liste de façon asynchrone
+  */
  $syl.wait = function(list, callback){
      var indexes = [],
          k = 0;
@@ -733,7 +743,6 @@ const { type } = require('os');
      }
      until();
  }
- 
  /**
   * La méthode backTo permet de faire des bonds arrière en lecture en prenant en compte la décompte des lignes 
   */
@@ -1029,23 +1038,31 @@ const { type } = require('os');
      });
  }
  /**
+  * @SECTOR : TYPE
+  */
+ /**
+  * La méthode isBaseType permet de définir si un type est un type de base
+  */
+ $syl.isBaseType = function(type){
+    var type = typeof type == 'string' ? this.getBaseType(type) : type;
+    return Synthetic.Lang.baseType.indexOf(type) >= 0;
+}
+ /**
   * La méthode genericType prend en charge le types généric
  */
  $syl.genericType = function(type,origin){
      var $this = this,
          _currType, _cursor,
-         origin = this.set(origin, false),
          _type = type, isBaseType;
      return new Promise(function(res,rej){
-         if($this.isBaseType(_type) && ['Array', 'JSON'].indexOf(_type) < 0){
+         if($this.isBaseType(_type) && !$this.isTypeInBaseTypeList(['Array','JSON'],_type)){
              $this.exception($this.err("primitive type [ "+ _type + " ] can't be generic !"),true);
          }
-         var _dictMod = _type != 'Array',
+         var _dictMod = !$this.isTypesEqual(_type, Synthetic.Lang.typeFromConstants.Array),
              _origin,
              type = {
                  type: _type,
                  constraints: null,
-                 origin: origin,
                  hasKeyConstraint: false,
                  hasNextType: false,
                  saved: false
@@ -1055,15 +1072,16 @@ const { type } = require('os');
              var r = false;
              if(lastword != null && type.constraints != null){
                  r = true;
-                 if(_dictMod && !type.hasKeyConstraint && ['Number', 'String','Any'].indexOf(lastword) < 0){
+                 if(_dictMod && !type.hasKeyConstraint && !$this.isTypeInBaseTypeList(['Number','String','Any'],lastword)){
+                    //  console.log('[Lastword]',lastword)
                      $this.exception($this.err("Number or String are only allowed to be key constraints"));
                  }
                  type.constraints[!type.hasKeyConstraint && _dictMod ? 'key' : 'value']
-                 .push(typeof lastword == 'string' ? {
-                     type: lastword,
+                 .push({
+                     type: lastword.addr,
                      origin: _origin,
                      constraints: null
-                 } : lastword);
+                 });
                  if(_dictMod && !type.hasKeyConstraint){
                      type.hasKeyConstraint = true;
                  }
@@ -1082,8 +1100,7 @@ const { type } = require('os');
                          recursive: false
                      };
                  }
-                 
-                 else if(lastword == null || typeof lastword != 'string'){
+                 else if(lastword == null){
                      $this.exception($this.err("illegal expression [ "+cursor.char+" ]"),true);
                  }
                  else{
@@ -1093,7 +1110,6 @@ const { type } = require('os');
              
              else if(type.constraints != null){
                  if(cursor.char == '|'){
-                     
                      if(!savetype()){
                          $this.exception($this.err("illegal expression [ "+cursor.char+" ]"),true);
                      }
@@ -1105,21 +1121,17 @@ const { type } = require('os');
                              $this.exception($this.err("illegal expression [ "+cursor.char+" ]"),true);
                          }
                          if(type.constraints.key.length == 0 && _dictMod){
-                             lastword = 'Any';
+                             lastword = Synthetic.Lang.typeFromConstants.Any;
                              savetype();
                          }
                          type.constraints.recursive = true;
                          $this.goTo(2);
                      }
-                     
-                     
-                     
                  }
                  else if(cursor.char == ','){
                      savetype();
                      type.hasKeyConstraint = true;
-                     if( (type.constraints.key.length == 0 && _dictMod) || (!_dictMod && !type.constraints.recursive)){
-                         
+                     if( (type.constraints.key.length == 0 && _dictMod) || (!_dictMod && !type.constraints.recursive)){   
                          $this.exception($this.err("illegal character [ , ]"),true);
                      }
                      $this.goTo(1);
@@ -1150,7 +1162,7 @@ const { type } = require('os');
                      loop.end();
                      $this.goTo(1);
                      if(type.constraints.value.length == 0){
-                         lastword = 'Any';
+                         lastword = Synthetic.Lang.typeFromConstants.Any;
                          savetype();
                      }
                      res(type);
@@ -1172,12 +1184,11 @@ const { type } = require('os');
                  _currType = $this.currentType;
                  $this.currentType = null;
                  $this.litteral(lastword,{parent:null},true).then(function(type){
-                     lastword += $this.code.substr(_cursor.index, $this.cursor.index - _cursor.index - 1);
-                     if(!type){
+                    //  lastword += $this.code.substr(_cursor.index, $this.cursor.index - _cursor.index - 1);
+                     if(!type || !$this.isType(type)){
                          $this.exception($this.err("[ "+lastword+" ] is not a defined type !"));
                      }
-                     _origin = type.origin;
-                     lastword = type.type;
+                     lastword = type;
                      $this.currentType = _currType;
                      cursor.char = $this.code[$this.cursor.index];
                      nextStatements(cursor,loop);
@@ -1196,10 +1207,29 @@ const { type } = require('os');
  $syl.getType = function(value){
      value = this.set(value,null);
      return value != null ? value.implicitType : this.currentType == null ? {
-         type: 'Any',
-         origin: null,
+         type: Synthetic.Lang.typeFromConstants.Any.addr,
          constraints: null
      } : this.currentType;
+ }
+ /**
+  * La méthode getBaseType permet de récupérer l'objet d'un type de base
+  */
+ $syl.getBaseType = function(name){
+     var r = {addr: null};
+     for(var i in Synthetic.Lang.baseType){
+         if(Synthetic.Lang.baseType[i].type == name){
+             r = Synthetic.Lang.baseType[i];
+             break;
+         }
+     }
+     return r;
+ }
+ $syl.getBaseTypes = function(list){
+     var r = [];
+     for(var i in list){
+        r.push(Synthetic.Lang.typeFromConstants[i]);
+     }
+     return r;
  }
  /**
   * La méthode getCodeType permet de savoir si une portion du code est:
@@ -1244,42 +1274,74 @@ const { type } = require('os');
  */
  $syl.getImplicitType = function(value){
      var type = this.getCodeType(value);
-     return type in Synthetic.Lang.typeFromConstants ? Synthetic.Lang.typeFromConstants[type] : 'Any';
+     return type in Synthetic.Lang.typeFromConstants ? Synthetic.Lang.typeFromConstants[type] : Synthetic.Lang.typeFromConstants.Any;
  }
  /**
-  * La méthode toVariableStructure permet de transformer une simple valeur en 
-  * valeur synthétic sérialisée
- */
- $syl.toVariableStructure = function(value,parent){
-     return this.meta({
-         label: 'variable',
-         type: this.getImplicitType(value),
-         value: this.clearString(value),
-         parent: parent && typeof parent == 'object' && 'parent' in parent ? parent.parent : parent
-     },false);
- }
- /**
-  * La méthode clearString permet d'enlever les quotes autour de la chaine synthetic
+  * La méthode isType permet de savoir si un objet est un type
   */
- $syl.clearString = function(value){
-     if(typeof value == 'string'){
-         value = value.replace(/^('|")|('|")$/g, '');
-     }
-     return value;
+ $syl.isType = function(object){
+    return typeof object == 'object' && object != null && Synthetic.Lang.typeCreatorKeys.indexOf(object.label) >= 0;
+ }
+ $syl.getObjectFromAddr = function(addr){
+    return this.isAddr(addr) ? new Synthetic.Lang.Reference(addr).getObject() : addr;
+ }
+ $syl.isTypeInBaseTypeList = function(list, type){
+     var type = this.getObjectFromAddr(type);
+     return this.getBaseTypes(list).indexOf(type) >= 0;
+ }
+ $syl.getTypeName = function(type){
+     var type = this.getObjectFromAddr(type);
+     return typeof type == 'object' && type != null ? type.name : type;
+ }
+ $syl.isTypesEqual = function(type1,type2){
+        type1 = this.getObjectFromAddr(type1);
+        type2 = this.getObjectFromAddr(type2);
+        // console.log({type1: type1.name,type2:  type2.name},  type1 == type2);
+        type1 = {
+            type: this.isType(type1) ? type1 : this.isAddr(type1.type) ? new Synthetic.Lang.Reference(type1.type).getObject() : type1.type,
+            alt: this.isType(type1) ? type1 : this.isAddr(type1.implicitType) ? new Synthetic.Lang.Reference(type1.implicitType).getObject() : type1.implicitType,
+        };
+        type2 = {
+            type: this.isType(type2) ? type2 : this.isAddr(type2.type) ? new Synthetic.Lang.Reference(type2.type).getObject() : type2.type,
+            alt: this.isType(type2) ? type2 : this.isAddr(type2.implicitType) ? new Synthetic.Lang.Reference(type2.implicitType).getObject() : type2.implicitType,
+        };
+        var r = type1.type == type2.type || type1.alt == type2.alt || 
+            type1.type == type2.alt || type1.alt == type2.type;
+    return r;
+ }
+ $syl.isTypeDescendant = function(type, ref){
+    var type = this.isAddr(type) ? new Synthetic.Lang.Reference(type).getObject() : type,
+        ref = this.isAddr(ref) ? new Synthetic.Lang.Reference(ref).getObject() : ref,
+        typeCHK = this.isType(type) && this.isType(ref);
+        r = typeCHK && type == ref;
+    /**
+     * Avant de faire la remontée en recherche, il faut d'abord s'assurer que ce sont deux types
+     * qu'on prend en compte
+     */
+    if(!r && typeCHK){
+        for(var i in type.supertypes){
+            r = this.isTypeDescendant(ref, type.supertypes[i]);
+            if(r){
+                break;
+            }
+        }
+    }
+    return r;
  }
  /**
   * en valeurs du langage en cours (javascript dans ce cas)
  */
  $syl.toPrimitiveValue = function(value){
-     var r;
-     switch(value.type){
-         case 'Number':
+     var r,
+         type = this.getObjectFromAddr(value.type);
+     switch(type){
+         case Synthetic.Lang.typeFromConstants.Number:
              r = parseFloat(value.value);
          break;
-         case 'Boolean':
+         case Synthetic.Lang.typeFromConstants.Boolean:
              r = this.toBoolean(value.value);
          break;
-         case 'String':
+         case Synthetic.Lang.typeFromConstants.String:
              r = (value.value+"").replace(/^('|")|('|")$/g, '');
          break;
          default:
@@ -1295,13 +1357,13 @@ const { type } = require('os');
  $syl.isValidateConstraint = function(type, list){
      var r = false,
          object = typeof type != 'string' && typeof type == 'object' && 'type' in type && 'implicitType' in type,
-         type = object ? type : {
-             type: type,
-             implicitType: type
-         },
-         list = typeof list == 'string' ? [{type: list}] : list;
+         type = this.getObjectFromAddr(type),
+         list = typeof list == 'string' || this.isType(list) ? [{
+             type: this.getObjectFromAddr(list).addr
+         }] : list;
      for(var i in list){
-         if(list[i].type == 'Any' || list[i].type == type.type || list[i].type == type.implicitType){
+        //  console.log('[type]',list[i].type, this.getTypeName(list[i].type));
+         if(this.isTypesEqual(list[i].type, Synthetic.Lang.typeFromConstants.Any) || this.isTypesEqual(list[i].type,type) ){
              r = true;
              break;
          }
@@ -1313,11 +1375,9 @@ const { type } = require('os');
   * et en contrainte de type
   */
  $syl.isSuitable = function(referal,object){
-     var r = object.type == referal.type ||
-             object.type == referal.implicitType ||
-             object.implicitType == referal.type ||
-             object.implicitType == referal.implicitType ||
-             object.type == 'Any' || object.implicitType == 'Any';
+     var r = this.isTypesEqual(object, referal) ||
+             this.isTypesEqual(object.type, Synthetic.Lang.typeFromConstants.Any) || 
+             this.isTypesEqual(object.implicitType, Synthetic.Lang.typeFromConstants.Any);
     if(r){
         r = (!referal.constraints == null && object.constraints != null && !object.constraints.recursive) 
             ||
@@ -1332,7 +1392,8 @@ const { type } = require('os');
         var keys = ['key', 'value'];
         for(var j in object.constraints[keys[k]]){
             for(var i in referal.constraints[keys[k]]){
-                r = object.constraints[keys[k]][j].type == referal.constraints[keys[k]][i].type || referal.constraints[keys[k]][i] == 'Any';
+                r = this.isTypesEqual(object.constraints[keys[k]][j].type, referal.constraints[keys[k]][i].type) || 
+                    this.isTypesEqual(referal.constraints[keys[k]][i].type, Synthetic.Lang.typeFromConstants.Any);
                 if(r){
                     break;
                 }
@@ -1344,7 +1405,7 @@ const { type } = require('os');
     }
     
     return r;
- }
+ } 
  /**
   * La méthode toStringTypes est une méthode extra, permettant de mettre sous forme
   * de chaine de caractères une liste d'objet de type
@@ -1352,7 +1413,7 @@ const { type } = require('os');
  $syl.toStringTypes = function(list){
      var r = '', k = 0;
      for(var i in list){
-         r += (r.length ? ' | ' : '')+list[i].type;
+         r += (r.length ? ' | ' : '')+this.getObjectFromAddr(list[i].type).type;
          k++;
      }
      if(k > 1){
@@ -1364,20 +1425,21 @@ const { type } = require('os');
   * La méthode getRelationType permet de savoir le type en priorité pour deux types distincts
   */
  $syl.getRelationType = function(type1,type2,operator){
-     var r = 'Any';
+     var r = Synthetic.Lang.typeFromConstants.Any,
+         types = Synthetic.Lang.typeFromConstants;
      if(type1 == type2 && ['||', '&&', '==', '===', '!=', '!=='].indexOf(operator) < 0){
-         return type1;
+         return this.getObjectFromAddr(type1);
      }
      switch(operator){
          case '+':
          case '+=':
-             if(type1 == 'Array' || type2 == 'Array'){
-                 if(['Number', 'Boolean', 'String', 'Regex'].indexOf(type1 == 'Array' ? type2 : type1) >= 0){
-                     r = 'Array';
+             if(this.isTypesEqual(type1, types.Array) || this.isTypesEqual(type2, types.Array) ){
+                 if([types.Number, types.Boolean, types.String, types.Regex].indexOf(this.isTypesEqual(type1,types.Array) ? type2 : type1) >= 0){
+                     r = types.Array;
                  }
              }
-             else if(type1 == 'String' || type2 == 'String'){
-                 r = 'String';
+             else if(this.isTypesEqual(type1, types.String) || this.isTypesEqual(type2, types.String) ){
+                 r = types.String;
              }
              break;
          case '||':
@@ -1386,7 +1448,7 @@ const { type } = require('os');
          case '!=':
          case '===':
          case '!==':
-             r = 'Boolean';
+             r = types.Boolean;
              break;
      }
      return r;
@@ -1401,6 +1463,27 @@ const { type } = require('os');
      return [false,"false",0,'0','null',null].indexOf(value) < 0;
  }
  
+/**
+  * La méthode toVariableStructure permet de transformer une simple valeur en 
+  * valeur synthétic sérialisée
+ */
+$syl.toVariableStructure = function(value,parent){
+    return this.meta({
+        label: 'variable',
+        type: this.getImplicitType(value).addr,
+        value: this.clearString(value),
+        parent: parent && typeof parent == 'object' && 'parent' in parent ? parent.parent : parent
+    },false);
+}
+/**
+ * La méthode clearString permet d'enlever les quotes autour de la chaine synthetic
+ */
+$syl.clearString = function(value){
+    if(typeof value == 'string'){
+        value = value.replace(/^('|")|('|")$/g, '');
+    }
+    return value;
+}
  /**
   * La méthode calc permet de simplifier une opération complexe en une seule valeur
  */
@@ -1413,11 +1496,11 @@ const { type } = require('os');
      compute = {
          structure: {
              "+": function(a,b){
-                 if(['JSON', 'Array'].indexOf(a.type) < 0 || ['JSON', 'Array'].indexOf(b.type) < 0){
+                 if(!$this.isTypeInBaseTypeList(['JSON', 'Array'],a.type) || !$this.isTypeInBaseTypeList(['JSON', 'Array'],b.type) < 0){
                      return null;
                  }
-                 var json = a.type == 'JSON' || b.type == 'JSON',
-                     result = json ? a.type == 'JSON' ? a : b : a,
+                 var json = $this.isTypesEqual(a.type,Synthetic.Lang.typeFromConstants.JSON) || $this.isTypesEqual(b.type,Synthetic.Lang.typeFromConstants.JSON),
+                     result = json ? $this.isTypesEqual(a.type,Synthetic.Lang.typeFromConstants.JSON) ? a : b : a,
                      source = result == a ? b : a;
                      result = $this.copy(result),
                      index = $this.len(result.value);
@@ -1428,7 +1511,7 @@ const { type } = require('os');
                  return result;
              },
              "-": function(a,b){
-                 if('Array' != a.type < 0 && 'Array' != b.type){
+                 if(!$this.isTypesEqual(a.type, Synthetic.Lang.typeFromConstants.Array) < 0 && !$this.isTypesEqual(b.type,Synthetic.Lang.typeFromConstants.Array)){
                      return null;
                  }
                  var result = $this.copy(a);
@@ -1530,7 +1613,7 @@ const { type } = require('os');
             if(r){
                 a = r[0]; b = r[0];
             }
-             var sameType = (a.type == b.type || a.implicitType == b.implicitType) && b.typeOrigin == a.typeOrigin;
+             var sameType = $this.isTypesEqual(a,b);
              return sameType && $this.toPrimitiveValue(a) == $this.toPrimitiveValue(b);
          },
          "!==": function(a,b){
@@ -1538,7 +1621,7 @@ const { type } = require('os');
             if(r){
                 a = r[0]; b = r[0];
             }
-             var sameType = (a.type == b.type || a.implicitType == b.implicitType) && b.typeOrigin == a.typeOrigin;
+             var sameType = $this.isTypesEqual(a,b);
              return sameType && $this.toPrimitiveValue(a) == $this.toPrimitiveValue(b);
          },
          "||": function(a,b){
@@ -1639,7 +1722,7 @@ const { type } = require('os');
                      result = compute[list[i]](operands[0], operands[1]);
                      list[k] = $this.meta({
                          label: 'variable',
-                         type: $this.getRelationType(operands[0].type, operands[1].type, list[i]),
+                         type: $this.getRelationType(operands[0].type, operands[1].type, list[i]).addr,
                          value: result,
                          parent: operands[1].parent
                      },false);
@@ -1669,7 +1752,7 @@ const { type } = require('os');
          $this.createBlock();
          var _type = $this.code[$this.cursor.index] == '[' ? 'Array' : 'JSON',
          structure = $this.meta({
-             type: _type,
+             type: Synthetic.Lang.typeFromConstants[_type].addr,
              constraints: data.object.type == _type ? data.object.constraints : null,
              label: 'variable',
              value: {},
@@ -1697,11 +1780,11 @@ const { type } = require('os');
                   * avec l'existence des variables pré-existantes !
                   */
                  object = $this.meta({
-                     type: !data.object.constraints ? 'Any' : data.object.constraints.value[0].type,
+                     type: !data.object.constraints ? Synthetic.Lang.typeFromConstants.Any.addr : data.object.constraints.value[0].type,
                      name: _type == 'JSON' ? key : index,
                      constraints: !data.object.constraints ? null : data.object.constraints,
                      value: null
-                 });
+                 }, false);
                  $this.linkWith(object,data.object);
                  
                  addrKey.push($this.setObjectAddr(object.addr));
@@ -1715,6 +1798,7 @@ const { type } = require('os');
                      ressources: data.ressources,
                      end: [Synthetic.Lang.constants._EOS[_type == 'Array' ? 'BRACKET' : 'BRACE'], Synthetic.Lang.constants._EOS.COMA]
                  }).then(function(result){
+                    //  console.log('[Result]',result);
                      if($this.executing && result){
                          $this.linkWith(result);
                      }
@@ -1733,10 +1817,10 @@ const { type } = require('os');
                           */
                          if(!result.name){
                              object.name = _type == 'Array' ? index : key;
-                             $this.save(object);
+                            //  $this.save(object);
                          }
                          if(structure.constraints){
-                             if(_isCallable && structure.constraints.value.length > 1 && !$this.isValidateConstraint("Any", structure.constraints.value)){
+                             if(_isCallable && structure.constraints.value.length > 1 && !$this.isValidateConstraint(Synthetic.Lang.typeFromConstants.Any, structure.constraints.value)){
                                  $this.cursor = $this.copy(_cursor);
                                  $this.exception($this.err("to much return value types !"));
                              }
@@ -1744,7 +1828,7 @@ const { type } = require('os');
                               * Si le resulta est un external, on vérifier qu'il n'y a acceptation que
                               * du type 'Any'
                               */
-                             if(object.label == 'external' && !$this.isValidateConstraint('Any', object.constraints.value)){
+                             if(object.label == 'external' && !$this.isValidateConstraint(Synthetic.Lang.typeFromConstants.Any, object.constraints.value)){
                                  $this.cursor = $this.copy(_cursor);
                                  $this.exception($this.err("external structure don't support other type than Any, "+structure.constraints.value[0].type+" was given !"));
                              }
@@ -1753,7 +1837,7 @@ const { type } = require('os');
                               * On lui passe le type principale de la contrainte de la 
                               * structure
                               */
-                             if(result.type == 'Any' && $this.isCallable(objet)){
+                             if($this.isTypesEqual(result.type,Synthetic.Lang.typeFromConstants.Any) && $this.isCallable(objet)){
                                  objet.type =  structure.constraints.value[0].type;
                              }
                              /**
@@ -1762,12 +1846,13 @@ const { type } = require('os');
                               */
                              else if(!$this.isValidateConstraint(object, structure.constraints.value)){
                                  $this.cursor = $this.copy(_cursor);
-                                 $this.exception($this.err($this.toStringTypes(structure.constraints.value)+" value expected, "+object.implicitType+" given !"));
+                                 $this.exception($this.err($this.toStringTypes(structure.constraints.value)+" value expected, "+$this.getTypeName(object.implicitType)+" given !"));
                              }
                          }
+                         $this.save(object);
                      }
                      if(data.object.constraints && !$this.isValidateConstraint(object, data.object.constraints.value)){
-                         if(['Array', 'JSON'].indexOf(object.type) < 0 || !data.object.constraints.recursive){
+                         if(!$this.isTypeInBaseTypeList(['Array', 'JSON'],object.type)|| !data.object.constraints.recursive){
                              $this.cursor = _cursor;
                              $this.exception($this.err($this.toStringTypes(data.object.constraints.value)+" value expected, "+object.implicitType+" given !"));
                          }
@@ -1786,9 +1871,6 @@ const { type } = require('os');
                      
                      switch($this.code[$this.cursor.index-1]){
                          case ',':
-                             if(/[\S]+/.test($this.code[$this.cursor.index])){
-                                 
-                             }
                              _cursor = $this.copy($this.cursor);
                          break;
                          case ']':
@@ -1804,9 +1886,6 @@ const { type } = require('os');
                              else{
                                  $this.exception($this.err("Illegal character !"),true);
                              }
-                         break;
-                         default:
-                             
                          break;
                      }
                      loop.start();
@@ -1843,11 +1922,11 @@ const { type } = require('os');
                          else if(['}', ','].indexOf(_char) >= 0){
                              if($this.getCodeType(cursor.word) == Synthetic.Lang.constants.LITTERAL){
                                  $this.litteral(cursor.word, data.ressources).then(function(result){
-                                     
                                      if($this.executing){
                                          if(data.object.constraints && !$this.isValidateConstraint("String", data.object.constraints.key)){
                                              if(['Array', 'JSON'].indexOf(result.type) < 0 || !data.object.constraints.recursive){
                                                  $this.cursor = _cursor;
+                                                 console.log(data.object.constraints)
                                                  $this.exception($this.err($this.toStringTypes(data.object.constraints.key)+" key type expected, String given implicitly !"));
                                              }
                                          }
@@ -1883,14 +1962,12 @@ const { type } = require('os');
                      });
                  }
                  else if(cursor.char == '}'){
-                     
                      loop.end();
                  }
              }
          }).then(function(){
              $this.restoreObjectAddr(addrKey);
              $this.restoreScope(_scopeKey);
-             
              res(structure);
          });
      });
@@ -1920,7 +1997,6 @@ const { type } = require('os');
                      ressources: data.ressources,
                      end: [EOS.ELSE]
                  }).then(function(value){
-                     
                      if(data.reason){
                          result = value;
                          $this.setExecutionMod(false);
@@ -2039,8 +2115,8 @@ const { type } = require('os');
                             loop.end();
                             return;
                         }
-                         if($this.executing){
-                            if(result.type != 'Number' && result.label != 'variable' && preOperations >= 0 && preOperations != Synthetic.Lang.simpleOperations.REVERSE){
+                        if($this.executing){
+                            if(!$this.isTypesEqual(result.type, Synthetic.Lang.typeFromConstants.Number) && result.label != 'variable' && preOperations >= 0 && preOperations != Synthetic.Lang.simpleOperations.REVERSE){
                                 $this.cursor = $this.copy(_cursor);
                                 $this.exception($this.err("Number value expected"),true);
                             }
@@ -2092,7 +2168,6 @@ const { type } = require('os');
                          }
                          waitingForNextOperand = false;
                         
-                         
                          loop.start();
                      })
                      return;
@@ -2175,8 +2250,8 @@ const { type } = require('os');
                      */
                      if(preOperations >= 0 && $this.executing){
                          
-                         if(type != 'Number' && preOperations != Synthetic.Lang.simpleOperations.REVERSE){
-                             console.log('[Word]',cursor.word, preOperations)
+                         if(!$this.isTypesEqual(type, Synthetic.Lang.typeFromConstants.Number) && preOperations != Synthetic.Lang.simpleOperations.REVERSE){
+                            //  console.log('[Word]',cursor.word, preOperations)
                              $this.exception($this.err("Number value expected"));
                          }
                          cursor.word = parseFloat(cursor.word);
@@ -2382,8 +2457,8 @@ const { type } = require('os');
                           * Si on prend en compte le '[' et que la valeur précédente n'est pas
                           * une chaine de caractère ou tableau ou un JSON, on soulève une erreur
                           */
-                         if(_start == constants.BRACKET && ['String','Array', 'JSON'].indexOf($this.getType(values[values.length - 1])) < 0){
-                             $this.exception($this.err("illegal character [ "+cursor.char+"]"),true);
+                         if(_start == constants.BRACKET && !$this.isTypeInBaseTypeList(['String','Array', 'JSON'],$this.getType(values[values.length - 1]))){
+                             $this.exception($this.err("illegal character [ "+cursor.char+" ]"),true);
                          }
                          _cursor = $this.copy($this.cursor);
                          loop.stop();
@@ -2404,7 +2479,6 @@ const { type } = require('os');
                              subvalue: true,
                              end: [constants.PARENTHESE]
                          }).then(function(result){
-                             
                              /**
                               * Si le caractère actuel n'est pas un ')'
                               * Il se pourrait bien qu'on a tenté une fonction
@@ -2484,7 +2558,7 @@ const { type } = require('os');
                       * Sinon on déclenche une erreur
                       */
                      else{
-                         $this.exception($this.err("illegal character [ "+cursor.char+"]"),true);
+                         $this.exception($this.err("illegal character [ "+cursor.char+" ]"),true);
                      }
                  }
               }
@@ -2502,20 +2576,22 @@ const { type } = require('os');
              }
              
              var r = $this.executing ? $this.calc(values) : null;
-             if($this.executing && !data.subvariables && !data.subvalue && data.object.type != 'Any' && (!r || (r.type != data.object.type && r.implicitType != data.object.type)) ){
+            //  console.log('[DATA]',data.object)
+             if($this.executing && !data.subvariables && !data.subvalue && !$this.isTypesEqual(data.object.type, Synthetic.Lang.typeFromConstants.Any) && (!r || !$this.isTypesEqual(r, data.object)) ){
                  
                  if(!$this.getStructure('currentInstance') && (!r || !('labelConstraint' in r && r.labelConstraint == 'callable' && r.label == 'function'))){
                      if(_cursor){
                         $this.cursor = $this.copy(_cursor);
                      }
-                    //  console.log('[Data]',data.object);
-                     $this.exception($this.err(data.object.type+" value expected, "+(r ? r.implicitType : "Any" )+" given !"));
+                    //  console.log('[Data]',data.object.name);
+                     $this.exception($this.err($this.getTypeName(data.object.type)+" value expected, "+(r ? $this.getTypeName(r.implicitType) : "Any" )+" given !"));
                  }
              }
              else if($this.executing && data.subvariables && data.object.constraints && (!r || !$this.isValidateConstraint(r, data.object.constraints.value)) ){
-                 if(!r || ['Array', 'JSON'].indexOf(r.type) < 0 || !data.object.constraints.recursive){
-                     $this.exception($this.err($this.toStringTypes(data.object.constraints.value)+" value expected, "+(!r ? "Any" : r.type)+" given !"));
-                 }
+                if(!r || $this.isTypeInBaseTypeList(['Array', 'JSON'],r.type) < 0 || !data.object.constraints.recursive){
+                    //  console.log('[Object]',data.object, r);
+                     $this.exception($this.err($this.toStringTypes(data.object.constraints.value)+" value expected, "+(!r ? "Any" : $this.getTypeName(r.type))+" given !"));
+                }
              }
              $this.garbage();
              res(r);
@@ -2942,7 +3018,7 @@ const { type } = require('os');
              native: true,
              async: name == 'timer',
              arguments: {},
-             type: Synthetic.Lang.nativeFunctionTypes[name]
+             type: Synthetic.Lang.typeFromConstants[Synthetic.Lang.nativeFunctionTypes[name]].addr
          },false);
      }
      else{
@@ -2974,7 +3050,7 @@ const { type } = require('os');
   */
  $syl.containsKey = function(key, object){
      if(!object){
-         $this.exception(this.err("cant read [ "+key+" ] property of null"));
+         this.exception(this.err("cant read [ "+key+" ] property of null"));
      }
      return typeof object.value[key] != 'undefined';
  }
@@ -3008,17 +3084,6 @@ const { type } = require('os');
      return object && ['function','external', more ? 'class' : ''].indexOf(object.label) >= 0;
  }
  /**
-  * La méthode isType permet de savoir si un objet est un type
-  */
- $syl.isType = function(object){
-    return Synthetic.Lang.typeCreatorKeys.indexOf(object.label) >= 0;
- }
- $syl.isTypesEqual = function(type1,type2){
-    var r = type1.type == type2.type || type1.implicitType == type2.implicitType || 
-            type1.type == type2.implicitType || type1.implicitType == type2.type;
-    return r;
- }
- /**
   * @SECTOR : execution
   */
  
@@ -3041,7 +3106,7 @@ const { type } = require('os');
              hexa: $this.convert().hexa,
              struct: function(e,n){
                  var n = $this.set(n,0),
-                     array = e && (e.type == 'Array' || e.implicitType == 'Array') ? 1 : e && (e.type == 'JSON' || e.implicitType == 'JSON') ? 2 : 0;
+                     array = e && $this.isTypesEqual(e, Synthetic.Lang.typeFromConstants.Array) ? 1 : e && $this.isTypesEqual(e, Synthetic.Lang.typeFromConstants.JSON) ? 2 : 0;
                      r = array > 0 ? array == 1 ? '[' : '{' : '';
                  if(array > 0){
                      for(var i in e.value){
@@ -3051,7 +3116,7 @@ const { type } = require('os');
                      r += r.length > 1 && array > 1 ? '\n' : '';
                  }
                  else{
-                     r += e && (e.type == 'String' || e.implicitType == 'String') && n > 0 && !$this.isCallable(e) ? 
+                     r += e && $this.isTypesEqual(e,$this.getBaseType('String')) && n > 0 && !$this.isCallable(e) ? 
                                  '"'+e.value+'"' : 
                                  e ? 
                                      'value' in e ? e.value : e.label+" ["+e.addr+"]"
@@ -3070,7 +3135,7 @@ const { type } = require('os');
              expect: function(arg,n,types){
                  if(!$this.isValidateConstraint(arg, types)){
                      $this.cursor = $this.copy(arg.cursor);
-                     $this.exception($this.toStringTypes(types)+" expected for argument "+n+" of "+serial.name+", "+arg.implicitType+" given !");
+                     $this.exception($this.toStringTypes(types)+" expected for argument "+n+" of "+serial.name+", "+$this.getTypeName(arg.implicitType)+" given !");
                  }
              },
              rearrange: function(){
@@ -3087,7 +3152,6 @@ const { type } = require('os');
              print: function(){
                  var r = '';
                  for(var i in args){
-                     
                      r += (r.length ? ' ' : '')+this.struct(args[i]); 
                  }
                  console.log(r);
@@ -3124,7 +3188,7 @@ const { type } = require('os');
              len: function(){
                  var r = 0;
                  if('0' in args && 'value' in args[0]){
-                     if(['Array', 'JSON'].indexOf(args[0].type)){
+                     if($this.isTypeInBaseTypeList(['Array', 'JSON'], args[0].type)){
                          r = $this.len(args[0].value);
                      }
                      else{
@@ -3135,12 +3199,12 @@ const { type } = require('os');
              },
              split: function(){
                  var r = [], separator = '', result = $this.meta({
-                     type: 'Array',
+                     type: Synthetic.Lang.typeFromConstants.Array.addr,
                      value: {}
                  },false);
-                 this.expect(args[0],0,[{type:'String'}]);
-                 if('0' in args && (args[0].type == 'String' || args[0].implicitType == 'String')){
-                     if('1' in args && (args[1].type == 'String' || args[1].implicitType == 'String')){
+                 this.expect(args[0],0,[{type: Synthetic.Lang.typeFromConstants.String.addr}]);
+                 if('0' in args && $this.isTypesEqual(args[0], Synthetic.Lang.typeFromConstants.String.addr)){
+                     if('1' in args && $this.isTypesEqual(args, Synthetic.Lang.typeFromConstants.String.addr)){
                          separator = args[1].value;
                      }
                      r = args[0].value.split(separator);
@@ -3151,44 +3215,44 @@ const { type } = require('os');
                  return result;
              },
              typeof: function(){
-                 var r = "Any";
+                 var r = Synthetic.Lang.typeFromConstants.Any.type;
                  if('0' in args){
-                     r = args[0].implicitType;
+                     r = $this.getObjectFromAddr(args[0].implicitType).type;
                  }
                  return $this.toVariableStructure(r);
              },
              replace: function(){
                  this.err(3);
                  var r = args[0].value;
-                 this.expect(args[0],0,[{type:'String'}]);
-                 this.expect(args[1],1,[{type:'String'},{type:'Number'}]);
-                 this.expect(args[2],2,[{type:'String'},{type:'Number'}]);
+                 this.expect(args[0],0,[{type:Synthetic.Lang.typeFromConstants.String.addr}]);
+                 this.expect(args[1],1,[{type: Synthetic.Lang.typeFromConstants.String.addr},{type: Synthetic.Lang.typeFromConstants.Number.addr}]);
+                 this.expect(args[2],2,[{type: Synthetic.Lang.typeFromConstants.String.addr},{type: Synthetic.Lang.typeFromConstants.Number.addr}]);
                  r = args[0].value.replace(args[1].value, args[2].value);
                  return $this.toVariableStructure(r);
              },
              lower: function(){
-                 this.expect(args[0], 0, [{type:'String'},{type:'Number'}]);
+                 this.expect(args[0], 0, [{type: Synthetic.Lang.typeFromConstants.String.addr},{type: Synthetic.Lang.typeFromConstants.Number.addr}]);
                  var r = $this.toVariableStructure(args[0].value.toLowerCase());
-                 r.type = 'String';
-                 r.implicitType = 'String';
+                 r.type = Synthetic.Lang.typeFromConstants.String.addr;
+                 r.implicitType = Synthetic.Lang.typeFromConstants.String.addr;
                  return r;
              },
              maj: function(){
-                 this.expect(args[0], 0, [{type:'String'},{type:'Number'}]);
+                 this.expect(args[0], 0, [{type:Synthetic.Lang.typeFromConstants.String.addr},{type: Synthetic.Lang.typeFromConstants.Number.addr}]);
                  
                  var r = $this.toVariableStructure(args[0].value.toUpperCase());
-                 r.type = 'String';
-                 r.implicitType = 'String';
+                 r.type = Synthetic.Lang.typeFromConstants.String.addr;
+                 r.implicitType = Synthetic.Lang.typeFromConstants.String.addr;
                  return r;
              },
              push: function(){
                  this.err(2);
-                 this.expect(args[0], 0, [{type: 'Array'}]);
+                 this.expect(args[0], 0, [{type: Synthetic.Lang.typeFromConstants.Array.addr}]);
                  var index = $this.len(args[0].value);
                  for(var i in args){
                      if(i * 1 > 0){
-                         this.expect(args[i], i, args[0].constraints ? args[0].constraints.value : [{type: 'Any'}]);
-                         if(['Array','JSON'].indexOf(args[i].type) >= 0 && (!args[0].constraints || !args[0].constraints.recursive)){
+                         this.expect(args[i], i, args[0].constraints ? args[0].constraints.value : [{type: Synthetic.Lang.typeFromConstants.Any.addr}]);
+                         if($this.isTypeInBaseTypeList(['Array','JSON'],args[i].type) >= 0 && (!args[0].constraints || !args[0].constraints.recursive)){
                              $this.cursor = $this.copy(arg[i].cursor);
                              $this.exception($this.err("trying to push structure into non-recursive structure !"));
                          }
@@ -3199,20 +3263,20 @@ const { type } = require('os');
                  return args[0];
              },
              shift: function(){
-                 this.expect(args[0], 0, [{type: 'Array'}, {type: 'JSON'}]);
+                 this.expect(args[0], 0, [{type: Synthetic.Lang.typeFromConstants.Array.addr}, {type: Synthetic.Lang.typeFromConstants.JSON.addr}]);
                  for(var i in args[0].value){
                      delete args[0].value[i];
                      break;
                  }
-                 if(args[0].type == 'Array' || args[0].implicitType == 'Array'){
+                 if($this.isTypesEqual(args[0],Synthetic.Lang.typeFromConstants.Array)){
                      this.rearrange();
                  }
                  return args[0];
              },
              pop: function(){
-                 this.expect(args[0], 0, [{type: 'Array'},{type: 'JSON'}]);
+                 this.expect(args[0], 0, [{type: Synthetic.Lang.typeFromConstants.Array.addr},{type: Synthetic.Lang.typeFromConstants.JSON.addr}]);
                  var index = $this.len(args[0].value),
-                     json = args[0].type == 'JSON' || args[0].implicitType == 'JSON',
+                     json = $this.isTypesEqual(args[0],Synthetic.Lang.typeFromConstants.JSON),
                      indexed = false;
                  for(var i in args){
                      if(typeof args[0].value[args[i].value] != 'undefined'){
@@ -3225,7 +3289,7 @@ const { type } = require('os');
                      }
                      delete args[0].value[index];
                  }
-                 if(args[0].type == 'Array' || args[0].implicitType == 'Array'){
+                 if($this.isTypesEqual(args[0],Synthetic.Lang.typeFromConstants.Array)){
                      this.rearrange();
                  }
                  return args[0];
@@ -3240,7 +3304,7 @@ const { type } = require('os');
                  return $this.toVariableStructure(r, ressources.parent);
              },
              sort: function(){
-                 this.expect(args[0], 0, [{type: 'Array'}]);
+                 this.expect(args[0], 0, [{type: Synthetic.Lang.typeFromConstants.Array.addr}]);
                  var tmp, len = $this.len(args[0].value);
                  for(var i = 0; i < len - 1; i++){
                      for(var j = i + 1; j < len; j++){
@@ -3254,7 +3318,7 @@ const { type } = require('os');
                  return args[0];
              },
              reverse: function(){
-                 this.expect(args[0], 0, [{type: 'Array'}]);
+                 this.expect(args[0], 0, [{type: Synthetic.Lang.typeFromConstants.Array.addr}]);
                  var tmp, len = $this.len(args[0].value);
                  for(var i = 0; i < len - 1; i++){
                      if(i < len - 1 - i){
@@ -3269,39 +3333,39 @@ const { type } = require('os');
                  return args[0];
              },
              round: function(){
-                 this.expect(args[0], 0, [{type: 'Number'}]);
+                 this.expect(args[0], 0, [{type: Synthetic.Lang.typeFromConstants.Number.addr}]);
                  var precision = 0;
                  if('1' in args){
-                     this.expect(args[1], 0, [{type: 'Number'}]);
+                     this.expect(args[1], 0, [{type: Synthetic.Lang.typeFromConstants.Number.addr}]);
                      precision = Math.floor(args[1].value * 1);
                  }
                  var r = Math.round(args[0].value * Math.pow(10,precision)) / Math.pow(10,precision);
                  return $this.toVariableStructure(r);
              },
              floor: function(){
-                 this.expect(args[0], 0, [{type: 'Number'}]);
+                 this.expect(args[0], 0, [{type: Synthetic.Lang.typeFromConstants.Number.addr}]);
                  return $this.toVariableStructure(Math.floor(args[0].value * 1));
              },
              ceil: function(){
-                 this.expect(args[0], 0, [{type: 'Number'}]);
+                 this.expect(args[0], 0, [{type: Synthetic.Lang.typeFromConstants.Number.addr}]);
                  return $this.toVariableStructure(Math.ceil(args[0].value * 1));
              },
              abs: function(){
-                 this.expect(args[0], 0, [{type: 'Number'}]);
+                 this.expect(args[0], 0, [{type: Synthetic.Lang.typeFromConstants.Number.addr}]);
                  return $this.toVariableStructure(Math.abs(args[0].value * 1));
              },
              pow: function(){
                  this.err(2);
-                 this.expect(args[0], 0, [{type: 'Number'}]);
-                 this.expect(args[1], 1, [{type: 'Number'}]);
+                 this.expect(args[0], 0, [{type: Synthetic.Lang.typeFromConstants.Number.addr}]);
+                 this.expect(args[1], 1, [{type: Synthetic.Lang.typeFromConstants.Number.addr}]);
                  return $this.toVariableStructure(Math.pow(args[0].value * 1, args[1].value * 1));
              },
              max: function(max){
-                 this.expect(arg[0],0,[{type: 'Number'}]);
+                 this.expect(arg[0],0,[{type: Synthetic.Lang.typeFromConstants.Number.addr}]);
                  var r = arg[0].value * 1,
                      max = $this.set(max, true);
                  for(var i in args){
-                     this.expect(arg[i],i,[{type: 'Number'}]);
+                     this.expect(arg[i],i,[{type: Synthetic.Lang.typeFromConstants.Number.addr}]);
                      r = (max && r > args[i].value) || (!max && r < args[i].value) ? r : args[i].value;
                  }
                  return $this.toVariableStructure(r);
@@ -3311,15 +3375,15 @@ const { type } = require('os');
              },
              join: function(){
                  this.err(2);
-                 this.expect(args[0], 0, [{type: 'Array'}]);
-                 this.expect(args[1], 1, [{type: 'String'}, {type: 'Number'}]);
+                 this.expect(args[0], 0, [{type: Synthetic.Lang.typeFromConstants.Array.addr}]);
+                 this.expect(args[1], 1, [{type: Synthetic.Lang.typeFromConstants.String.addr}, {type: Synthetic.Lang.typeFromConstants.Number.addr}]);
                  var r = '';
                  for(var i in args[0].value){
                      r += (r.length ? args[1].value : '')+args[0].value[i].value;
                  }
                  r = $this.toVariableStructure(r);
-                 r.type = 'String';
-                 r.implicitType = 'String';
+                 r.type = Synthetic.Lang.typeFromConstants.String.addr;
+                 r.implicitType = Synthetic.Lang.typeFromConstants.String.addr;
                  return r;
              },
              bool: function(){
@@ -3344,7 +3408,7 @@ const { type } = require('os');
          if(serial.name == 'tap'){
              var message = "";
              if('0' in args){
-                 natives.expect(args[0],0,[{type: 'String'}]);
+                 natives.expect(args[0],0,[{type: Synthetic.Lang.typeFromConstants.String.addr}]);
                  message = args[0].value;
              }
              if(node_env){
@@ -3468,12 +3532,19 @@ const { type } = require('os');
       */
      var key = [$this.saveScope(true)],
          instance = null,
-         _instanceKey = [],
+         _instanceKey = [], defaultConstruct = false,
          _cursor = $this.copy($this.cursor);
      if(callable.label == 'class'){
          instance = $this.createInstance(callable);
          key.push($this.setScope(instance.scope));
          callable = callable._constructor;
+         if(!callable){
+             callable = $this.meta({
+                 type: instance.type,
+                 label: 'function'
+             }, false);
+             defaultConstruct = true;
+         }
      }
      else if(callable.parent in this.modules){
          if(this.modules[callable.parent].structure in Synthetic.Lang.objects){
@@ -3529,7 +3600,7 @@ const { type } = require('os');
                          });
                      }
                      else{
-                        if(!callable && instance && instance.instanciation){
+                        if((!callable || defaultConstruct) && instance && instance.instanciation){
                             $this.setExecutionMod(true);
 
                             // response = $this.toVariableStructure(response,ressources);
@@ -3563,10 +3634,10 @@ const { type } = require('os');
                             if(!callable){
                                 var types = '';
                                 for(var i in args){
-                                    types += (types.length ? ', ' : '')+args[i].type;
+                                    types += (types.length ? ', ' : '')+$this.getTypeName(args[i].type);
                                 }
                                 $this.cursor = $this.copy(_cursor);
-                                $this.exception($this.err("undefined method signature like "+ (instance ? instance.type+'.' : '') +defaultCallable.name+"("+types+") !"));
+                                $this.exception($this.err("undefined method signature like "+ (instance ? $this.getTypeName(instance.type)+'.' : '') +defaultCallable.name+"("+types+") !"));
                             }
                             key.push($this.setScope(callable.childScope));
                             if(instance){
@@ -3609,7 +3680,7 @@ const { type } = require('os');
                                         response = $this.toVariableStructure(response,ressources);
                                     }
                                     if(!$this.isValidateConstraint(response, callable.type)){
-                                        $this.exception($this.err(" "+callable.type+" expected, "+response.type+" given"));
+                                        $this.exception($this.err(" "+callable.type+" expected, "+$this.getTypeName(response.type)+" given"));
                                     }
                                 }
                                 if(instance){
@@ -3629,10 +3700,11 @@ const { type } = require('os');
          })
      });
  }
- $syl.getArgsListTypes = function(list){
-     var r = [];
+ $syl.getArgsListTypes = function(list, realtype){
+     var r = [],
+         realtype = this.set(realtype, true);
      for(var i in list){
-         r.push(list[i].type);
+         r.push(list[i][realtype ? 'implicitType' : 'type']);
      }
      return r;
  }
@@ -3688,8 +3760,8 @@ const { type } = require('os');
          function resetArg(){
              var r = $this.meta({
                  label: 'argument',
-                 type: 'Any',
-                 implicitType: 'Any',
+                 type: Synthetic.Lang.typeFromConstants.Any.addr,
+                 implicitType: Synthetic.Lang.typeFromConstants.Any.addr,
                  value: null,
                  altype: [],
                  unset: false,
@@ -3746,7 +3818,7 @@ const { type } = require('os');
                      $this.exception($this.err("unset argument [ "+arg.name+" ] can't have default value !"));
                  }
                  if(!withParenthese){
-                     console.log('[Cursor]',cursor.word);
+                    //  console.log('[Cursor]',cursor.word);
                      $this.exception($this.err("syntax error withing parenthesisless calling style function !"),true);
                  }
                  if(calling && !argName(cursor.word,true)){
@@ -3784,6 +3856,7 @@ const { type } = require('os');
                      if(arg.external && result.label != 'external'){
                          $this.exception($this.err("external expected, "+result.label+" given !"));
                      }
+                    //  if(!result) console.log('[Value]', $this.executing, serial)
                      arg.implicitType = result.implicitType;
                      arg.value = result.value;
                      arg.index = index;
@@ -3836,13 +3909,9 @@ const { type } = require('os');
                      }
                      _arguments[index] = typeof cursor.word == 'object' ? cursor.word : $this.toVariableStructure(cursor.word,serial.parent);
                      if(/[\S]+/.test(cursor.char)){
-                        
-                         
                          $this.backTo(cursor.char.length - (cursor.char.length == 1 || cursor.char == ';' ? 1 : 0));
                      }
                      _cursor = $this.copy($this.cursor);
-                    
-                    
                      loop.end();
                  }
                  else{
@@ -3924,7 +3993,7 @@ const { type } = require('os');
                 
                  if(Synthetic.Lang.reservedKeys.indexOf(cursor.word) >= 0 && cursor.word != 'null'){
                      if(_typeset){
-                         $this.exception($this.err("syntax error near by [ "+arg.type+" ... "+cursor.word+" ] !"),true);
+                         $this.exception($this.err("syntax error near by [ "+$this.getTypeName(arg.type)+" ... "+cursor.word+" ] !"),true);
                      }
                      if(!calling && cursor.word == 'unset' && !arg.constant){
                          arg.unset = true;
@@ -4102,7 +4171,6 @@ const { type } = require('os');
                      $this.exception($this.err("[ "+cursor.char+" ] unexpected !"),true);
                  }
                  loop.end();
-                 
              }
              else{
                  
@@ -4178,7 +4246,7 @@ const { type } = require('os');
                     }
                     //  console.log('[At][end]', arglist,signature,serial);
                     if(signature < 0){
-                        $this.exception($this.err("cannot find method ("+_instance.type+")."+serial.name+"("+$this.getArgsListTypes(_arguments).join(", ")+") !"));
+                        $this.exception($this.err("cannot find method ("+$this.getTypeName(_instance.type)+")."+serial.name+"("+$this.getArgsListTypes(_arguments, true).join(", ")+") !"));
                     }
                     signature *= 1;
                     // console.log('[Serial]',serial.name, signature, arglist);x
@@ -4275,12 +4343,7 @@ const { type } = require('os');
                          serial.arguments = arg;
                          if($this.code[$this.cursor.index] == '{'){
                              serial.braced = true;
- 
-                             
-                             
                              $this.goTo(1);
-                             
-                             
                          }
                          else if(/[\S]+/.test($this.code[$this.cursor.index])){
                              $this.backTo(1);
@@ -4349,7 +4412,7 @@ const { type } = require('os');
     var r = false, $this = this;
     function compare(a,b){
         var same = {type: false, argtype: false};
-        same.type = a.type == b.type || a.implicitType == b.implicitType;
+        same.type = $this.isTypesEqual(a,b);
         same.argtype = $this.len(a.arguments) == $this.len(b.arguments);
         if(same.argtype && !$this.len(a.arguments)){
             return same;
@@ -4361,7 +4424,7 @@ const { type } = require('os');
                 v = 0; f = false;
                 for(var j in a.arguments){
                     if(k == v){
-                        same.argtype = a.arguments[j].type == b.arguments[i].type || a.arguments[j].implicitType == b.arguments[i].implicitType;
+                        same.argtype = $this.isTypesEqual(a.arguments[j],b.arguments[i]);
                         if(same.argtype){
                             break;
                         }
@@ -4397,7 +4460,7 @@ const { type } = require('os');
  $syl.external = function(ressources){
      var $this = this,
          serial = this.meta({
-             type: 'Any',
+             type: Synthetic.Lang.typeFromConstants.Any.addr,
              label: 'external',
              parent: ressources.parent
          });
@@ -4427,7 +4490,7 @@ const { type } = require('os');
  $syl.callable = function(ressources){
      var $this = this,
          serial = this.meta({
-             type: 'Any',
+             type: Synthetic.Lang.typeFromConstants.Any.addr,
              label: 'function',
              labelConstraint: 'callable',
              parent: ressources.parent
@@ -4477,6 +4540,7 @@ const { type } = require('os');
              constraints: type.constraints,
              label: 'variable', 
              name: litteral, 
+             static: this.access.static,
              visible: MegaScope ? !this.access.private && !this.access.protected : this.access.export,
              parent: this.set(ressources.parent,null)
          }, !forInArgSearching && litteral != 'this'),
@@ -4484,9 +4548,12 @@ const { type } = require('os');
          _currentObjectInUse = null,
          _cursor;
          exist = !forInArgSearching && exist && MegaScope == null;
+
+        //  console.log('[Litteral]',litteral, exist);
          
          if(litteral == 'this'){
             //  console.log('__[Scope]',this.currentScope);
+            if($this.executing){
              _currentObjectInUse = $this.getCloserStruct(true);
              if(!_currentObjectInUse){
                  $this.exception($this.err("[ this ] does not point to any structure !"));
@@ -4499,15 +4566,25 @@ const { type } = require('os');
              },false);
              resultValue = serial;
              exist = $this.executing;
+            //  if(!$this.executing){
+            //     console.log('[THIS]',_currentObjectInUse);
+            //  }
+            }
+            else{
+                serial = $this.meta({type: "variable", value: null},false);
+                resultValue = null;
+            }
             // console.log('[Block]',_curr,$this.modules[$this.currentScope]);
          }
 
-         if(MegaScope){
+         if(MegaScope && !ref){
             /**
              * Si la Mégastructure est static, tous ses membres doivent être aussi static
              */
-            if(MegaScope.static && !serial.static){
-                $this.exception($this.err("static member expected for [ "+MegaScope.name+" ], [ " +resultValue.name+" ] is not static"));
+            // console.log('[Litteral]',litteral, serial, true);
+            if(MegaScope.static && !serial.static && !$this.isType(serial)){
+                // console.log('[Litteral]', resultValue, litteral, exist, serial);
+                $this.exception($this.err("static member expected for  ("+MegaScope.name+")." +serial.name+"(...) is not static"));
             }
             /**
              * Si la Mégastructure est une interface, tous ses membres doivent être aussi abstraits
@@ -4530,7 +4607,7 @@ const { type } = require('os');
      return new Promise(function(res){
          if(syntObject != null && $this.isType(syntObject) && assignType != null){
              if(!$this.getStructure('currentLoop') || $this.getStructure('currentLoop').type != 'forin' || $this.getStructure('currentLoop').argset){
-                $this.exception($this.err("syntax error : "+assignType.type+" ... "+syntObject.name),true);
+                $this.exception($this.err("syntax error : "+$this.getTypeName(assignType.type)+" ... "+syntObject.name),true);
              }
              else{
                  $this.currentType = null;
@@ -4550,7 +4627,7 @@ const { type } = require('os');
              if(cursor.char.length){
                  $this.backTo(cursor.char.length - 1);
              }
-             if(dotted && $this.executing){
+             if(dotted){
                  /**
                   * S'il y a de l'espace entre le point et le précédent objet,
                   * on fait en sorte que cela n'impacte pas la notation pointée
@@ -4570,33 +4647,36 @@ const { type } = require('os');
                      }
                  }
                  else{
-                     /**
-                      * Si l'objet en cours est null
-                      * on ne peut pas procéder au syntaxe pointé
-                      */
-                     if(resultValue == null){
-                         $this.cursor = $this.copy(_cursor);
-                         $this.exception($this.err("Cannot read property [ "+nextWord+" ] of null"));
-                     }
-                     if($this.containsKey(nextWord,resultValue)){
-                         resultValue = resultValue.value[nextWord];
-                         _cursor = $this.copy($this.cursor);
-                     }
-                     else{
-                         /**
-                          * Si l'objet exist mais pas la clé,
-                          * on le prépare paresseusement pour un enregistrement
-                          */
-                         if((resultValue.type == 'JSON' || resultValue.implicitType == 'JSON') && exist){
-                             settingKey = nextWord;
-                             settingKeyObject = resultValue;
-                         }
-                         else{
-                            $this.exception($this.err("can not read value of property [ "+nextWord+" ] "));
-                         }
-                         resultValue = null;
-                         _cursor = $this.copy($this.cursor);
-                     }
+                     if($this.executing){
+                        /**
+                         * Si l'objet en cours est null
+                         * on ne peut pas procéder au syntaxe pointé
+                         */
+                        if(resultValue == null && $this.executing){
+                            $this.cursor = $this.copy(_cursor);
+                            $this.exception($this.err("Cannot read property [ "+nextWord+" ] of null"));
+                        }
+                        console.log('[Result]',resultValue);
+                        if($this.containsKey(nextWord,resultValue)){
+                            resultValue = resultValue.value[nextWord];
+                            _cursor = $this.copy($this.cursor);
+                        }
+                        else{
+                            /**
+                             * Si l'objet exist mais pas la clé,
+                             * on le prépare paresseusement pour un enregistrement
+                             */
+                            if($this.isTypesEqual(resultValue, Synthetic.Lang.typeFromConstants.JSON) && exist){
+                                settingKey = nextWord;
+                                settingKeyObject = resultValue;
+                            }
+                            else{
+                                $this.exception($this.err("can not read value of property [ "+nextWord+" ] "));
+                            }
+                            resultValue = null;
+                            _cursor = $this.copy($this.cursor);
+                        }
+                    }
                      dotted = false;
                      if(called){
                          called = false;
@@ -4651,7 +4731,6 @@ const { type } = require('os');
                      }
                      if(!exist || resultValue || !settingKey){
                          key.push($this.setObjectAddr(exist ? resultValue.addr : serial.addr));
-                         
                      }
                      if(cursor.char == '=' && exist && resultValue){
                          
@@ -4666,8 +4745,9 @@ const { type } = require('os');
                          settingKey = $this.meta({
                              name: settingKey,
                              constraints: serial.constraints,
-                             visible: false
-                         });
+                             visible: false,
+                             value: null
+                         }, false);
                          $this.linkWith(settingKey,serial);
                          
                          key.push($this.setObjectAddr(settingKey.addr));
@@ -4692,7 +4772,7 @@ const { type } = require('os');
                                  addr: resultValue.addr
                              };
                              
-                             resultValue.value = $this.calc([resultValue, cursor.char == '++' ? '+=' : '-=', $this.meta({type: 'Number', label: 'variable', value: 1})]).value;
+                             resultValue.value = $this.calc([resultValue, cursor.char == '++' ? '+=' : '-=', $this.meta({type: Synthetic.Lang.typeFromConstants.Number.addr, label: 'variable', value: 1})]).value;
                              $this.extend(resultValue, tmp,true);
                          }
                          loop.end();
@@ -4721,7 +4801,7 @@ const { type } = require('os');
                                       * On doit vérifier que le type de retour n'est pas multiple
                                       */
                                      
-                                     if($this.isCallable(result) && serial.constraints && serial.constraints.value.length > 1 && !$this.isValidateConstraint("Any", serial.constraints.value)){
+                                     if($this.isCallable(result) && serial.constraints && serial.constraints.value.length > 1 && !$this.isValidateConstraint(Synthetic.Lang.typeFromConstants.Any, serial.constraints.value)){
                                          $this.cursor = $this.copy(_cursor);
                                          $this.exception($this.err("too much return value types !"));
                                      }
@@ -4732,16 +4812,16 @@ const { type } = require('os');
                                           * Si le resulta est un external, on vérifier qu'il n'y a acceptation que
                                           * du type 'Any'
                                           */
-                                         if(result.label == 'external' && !$this.isValidateConstraint('Any', serial.constraints.value)){
+                                         if(result.label == 'external' && !$this.isValidateConstraint(Synthetic.Lang.typeFromConstants.Any, serial.constraints.value)){
                                              $this.cursor = $this.copy(_cursor);
-                                             $this.exception($this.err("external structure don't support other type than Any, "+serial.constraints.value[0].type+" was given !"));
+                                             $this.exception($this.err("external structure don't support other type than Any, "+$this.getTypeName(serial.constraints.value[0].type)+" was given !"));
                                          }
                                          /**
                                           * Si c'est une fonction et que le type est Any
                                           * On lui passe le type principale de la contrainte de la 
                                           * structure
                                           */
-                                         if(result.type == 'Any' && $this.isCallable(result)){
+                                         if($this.isTypesEqual(result.type,Synthetic.Lang.typeFromConstants.Any) && $this.isCallable(result)){
                                              settingKeyObject.value[settingKey.name].type =  serial.constraints.value[0].type;
                                          }
                                          /**
@@ -4750,11 +4830,12 @@ const { type } = require('os');
                                           */
                                          else if(!$this.isValidateConstraint(result, serial.constraints.value)){
                                              $this.cursor = $this.copy(_cursor);
-                                             $this.exception($this.err($this.toStringTypes(serial.constraints.value)+" value expected, "+result.implicitType+" given !"));
+                                             $this.exception($this.err($this.toStringTypes(serial.constraints.value)+" value expected, "+$this.getTypeName(result.implicitType)+" given !"));
                                          }
                                      }
                                      $this.restoreScope(_scopeKey[1]);
                                      _scopeKey.pop();
+                                     $this.save(settingKey);
                                  }
                                  else{
                                      var tmp = {
@@ -4816,17 +4897,17 @@ const { type } = require('os');
                       ){
                          if(exist){
                              if(settingKey){
-                                 if(serial.type != "JSON"){
+                                 if(!$this.isTypesEqual(serial.type,Synthetic.Lang.typeFromConstants.JSON)){
                                      $this.exception($this.err("cannot add [ "+settingKey+" ] to [ "+serial.name+" ], JSON type required !"));
                                  }
                                  if(serial.constraints && serial.constraints.length > 1){
                                      $this.exception($this.err("too much return type !"));
                                  }
-                                 if(serial.constraints && !$this.isValidateConstraint("String", serial.constraints.key)){
+                                 if(serial.constraints && !$this.isValidateConstraint(Synthetic.Lang.typeFromConstants.String, serial.constraints.key)){
                                      $this.exception($this.err($this.toStringTypes(serial.constraints.key)+" key type expected String given !"));
                                  }
                                  serial.value[settingKey] = $this.meta({
-                                     type: !serial.constraints ? 'Any' : serial.constraints.value[0].type,
+                                     type: !serial.constraints ? Synthetic.Lang.typeFromConstants.Any.addr : serial.constraints.value[0].type,
                                      name: settingKey,
                                      constraints: !serial.constraints ? null : serial.constraints.value[0].constraints,
                                  });
@@ -4896,9 +4977,9 @@ const { type } = require('os');
                      * Si on recherche des arguments pour la boucle for ... in
                      * on empêche une affectation
                      */
-                    if(forInArgSearching){
+                     if(forInArgSearching){
                         $this.exception($this.err("syntax error withing for ... in statement"),true);
-                    }
+                     }
                      if(!exist && resultValue == null){
                          $this.exception($this.err("[ "+cursor.char+" ] unexpected !"),true);
                      }
@@ -4911,8 +4992,7 @@ const { type } = require('os');
                      loop.stop();
                      $this.value({
                          object: $this.meta({
-                             type: 'Any',
-                             implicitType: 'Any'
+                             type: Synthetic.Lang.typeFromConstants.Any.addr
                          },false), 
                          subvariables: false, 
                          ressources:ressources,
@@ -4927,7 +5007,7 @@ const { type } = require('os');
                               * Si l'objet exist mais pas la clé,
                               * on le prépare paresseusement pour un enregistrement
                               */
-                             if(['Array', 'JSON'].indexOf(resultValue.type) >= 0 && exist){
+                             if($this.isTypeInBaseTypeList(['Array', 'JSON'],resultValue.type) >= 0 && exist){
                                  settingKey = result.value;
                                  settingKeyObject = resultValue;
                              }
@@ -4954,7 +5034,6 @@ const { type } = require('os');
                              resultValue = null;
                              dotted = false;
                          }
-                         
                      }
                      else{
                          dotted = true;
@@ -5006,7 +5085,7 @@ const { type } = require('os');
                     //  console.log('[Litt][End]',litteral,exist,$this.tryMethodInstead);
                      if(!exist && $this.executing && !created && resultValue == null){
                          if($this.tryMethodInstead){
-                            console.log('[Litt]',litteral);
+                            // console.log('[Litt]',litteral);
                              if($this.executing){
                                 resultValue = null;
                                 $this.garbage(true);
@@ -5033,8 +5112,6 @@ const { type } = require('os');
                              return;
                          }
                          $this.caller(resultValue,ressources).then(function(result){
-                            
-                             
                              resultValue = result;
                              $this.linkWith(resultValue);
                              called = true;
@@ -5056,8 +5133,7 @@ const { type } = require('os');
                      if(!dotted || (dotted && [Synthetic.Lang.constants.LITTERAL, Synthetic.Lang.constants.TYPE, Synthetic.Lang.constants.KEYWORD].indexOf($this.getCodeType(nextWord+cursor.char)) < 0)){
                          
                          if(cursor.char.length && /[\S]+/.test(cursor.char)){
-                             $this.backTo(cursor.char.length - (cursor.char.length == 1 ? 1 : 0));
-                             
+                             $this.backTo(cursor.char.length - (cursor.char.length == 1 ? 1 : 0));   
                          }
                         
                          $this.linkWith(resultValue);
@@ -5065,7 +5141,7 @@ const { type } = require('os');
                      }
                      else{
                          $this.goTo(1);
-                         
+                
                          loop.start();
                      }
                  }
@@ -5083,8 +5159,8 @@ const { type } = require('os');
                         $this.exception($this.err("Only class can have constructor !"));
                     }
                     resultValue.label = 'constructor';
-                    resultValue.type = MegaScope.name;
-                    resultValue.implicitType = MegaScope.name;
+                    resultValue.type = MegaScope.type;
+                    resultValue.implicitType = MegaScope.type;
                     /**
                      * Si le class n'a pas de constructeur, on définit son premier
                      */
@@ -5298,7 +5374,7 @@ const { type } = require('os');
                          * Si on attend un pré-post incrementation, on assure que c'est fait obligatoirement
                          */
                          if(preOperation && $this.executing){
-                             if((result.type != 'Number' && result.implicitType != 'Number') || result.label != 'variable'){
+                             if(!$this.isTypesEqual(result,Synthetic.Lang.typeFromConstants.Number) || result.label != 'variable'){
                                 $this.exception($this.err("Invalid pre-"+(preOperation == '++' ? 'incrementation' : 'decrementation')+" syntax !"),true);
                              }
                             
@@ -5308,8 +5384,7 @@ const { type } = require('os');
                          preOperation = null;
                          if(result && $this.isType(result)){
                              $this.currentType = {
-                                 type: result.type,
-                                 origin: result.origin,
+                                 type: result.addr,
                                  constraints: null,
                                  object: result
                              };
@@ -5423,17 +5498,77 @@ const { type } = require('os');
          }),
          _scopeKey = [$this.saveScope(), $this.saveScope(true)],
          _addrKey = [$this.saveObjectAddr(), $this.setObjectAddr(serial.addr)],
+         old, parent,
          extending = false, implementing = false, waitingNext = false;
+         serial.type = serial.addr;
+         serial.implicitType = serial.addr;
         //  console.log('[Serial]',serial);
          $this.runner(function(cursor,loop){
              if(cursor.word && cursor.word.length){
                  if([Synthetic.Lang.constants.LITTERAL, Synthetic.Lang.constants.TYPE].indexOf($this.getCodeType(cursor.word)) < 0){
-                     $this.exception($this.err("illegal statement ["+cursor.word+"] encountered !"),true);
+                     if(!waitingNext && (!serial.name || ['extends', 'implements'].indexOf(cursor.word) < 0)){
+                        $this.exception($this.err("illegal statement ["+cursor.word+"] encountered !"),true);
+                     }
+                     else if(cursor.word == 'extends'){
+                        if(implementing){
+                            $this.exception($this.err("syntax error :: implements .... extends"))
+                        }
+                        waitingNext = true;
+                        extending = true;
+                     }
+                     else if(cursor.word == 'implements'){
+                        implementing = true;
+                        waitingNext = true;
+                     }
+                     return;
                  }
                  if(serial.name == null){
-                     serial.name = cursor.word;
-                     serial.type = cursor.word;
-                     serial.supertypes.push(cursor.word);
+                     /**
+                      * On recherche d'abord si le nom de la classe a déjà été utilisé,
+                      * dans un tel cas, il faut vérifier si elle a été déclarée constante
+                      * pour éviter sa rédéfinition.
+                      */
+                     loop.stop();
+                     $this.litteral(cursor.word, ressources, true).then(function(old){
+                        // console.log('[Old]',old);
+                        if(old && old.constant){
+                            $this.exception($this.err("Violation error from trying to rewrite class "+old.name+" defined at file: "+old.origin));
+                        }
+                        serial.name = cursor.word;
+                        loop.start();
+                     });
+                     return;
+                 }
+                 else if(!waitingNext){
+                     $this.exception($this.err("illegal litteral [ "+cursor.word+" ] encountered !"))
+                 }
+                 else{
+                     /**
+                      * On recherche l'objet à étendre ou implémenter
+                      * en vérifiant qu'il bien une classe ou une interface
+                      */
+                    loop.stop();
+                     $this.litteral(cursor.word, ressources).then(function(old){
+                        console.log('[Old]',old);
+                        // if(['class', 'interface'].indexOf(old.name))
+                        // if(old && old.constant){
+                        //     $this.exception($this.err("Violation error from trying to rewrite class "+old.name+" defined at file: "+old.origin));
+                        // }
+                        // serial.name = cursor.word;
+                        // serial.type = cursor.word;
+                        // serial.supertypes.push(cursor.word);
+                        // loop.start();
+                     });
+                     return;
+                    // if(!parent){
+                    //     $this.exception("can not find [ "+cursor.word+" ]")
+                    // }
+                    // else if(implementing){
+                    //     console.log()
+                    // }
+                    // else if(extending){
+   
+                    // }
                  }
              }
              if(cursor.char == '<'){    
@@ -5495,7 +5630,7 @@ const { type } = require('os');
         }
         var cursor = $this.copy($this.cursor), r = false;
         $this.value({
-            object: $this.meta({type: 'Any'}, false),
+            object: $this.meta({type: Synthetic.Lang.typeFromConstants.Any.addr}, false),
             ressources: data.ressources,
         }).then(function(object){
             if($this.executing){
@@ -5672,14 +5807,13 @@ const { type } = require('os');
          if($this.executing && parent.label != 'function'){
              $this.exception($this.err("Illegal statement ! return statement outside of function !"),true);
          }
+        //  console.log('[Return]',$this.executing, $this.code.substr($this.cursor.index, 10))
          $this.value({
              object: $this.executing ? $this.copy(parent) : $this.meta({},false),
              subvariables: false, 
              ressources : ressources,
              ternary: false
          }).then(function(result){
-             
-             
              if($this.executing){
                  $this.setExecutionMod(false);
                  res(result);
@@ -5709,7 +5843,7 @@ const { type } = require('os');
                  loop.stop();
                  $this.value({
                      ressources: ressources,
-                     object: $this.meta({type: 'Any'},false),
+                     object: $this.meta({type: Synthetic.Lang.typeFromConstants.Any.addr},false),
                      end: [Synthetic.Lang.constants._EOS[backToGetReference ? 'BRACE' : 'PARENTHESE']]
                  }).then(function(result){
                      reference = result;
@@ -5792,7 +5926,7 @@ const { type } = require('os');
                      }
                      else{
                          $this.value({
-                             object: $this.meta({type: 'Any'}, false),
+                             object: $this.meta({type: Synthetic.Lang.typeFromConstants.Any.addr}, false),
                              ressources: ressources,
                              end: [Synthetic.Lang.constants._EOS.ELSE,Synthetic.Lang.constants._EOS.OR]
                          }).then(function(result){
@@ -5924,7 +6058,6 @@ const { type } = require('os');
                  }
                  $this.restoreScope(_scopeKey);
                  if(except){
-                    
                      $this.setExecutionMod(_executing);
                  }
                 
@@ -5944,7 +6077,7 @@ const { type } = require('os');
                          
                          if($this.getCodeType(cursor.word) == Synthetic.Lang.constants.LITTERAL){
                              argset = $this.meta({
-                                 type: "Any",
+                                 type: Synthetic.Lang.typeFromConstants.Any.addr,
                                  name: cursor.word,
                                  value: message
                              },false);
@@ -6096,11 +6229,15 @@ const { type } = require('os');
                  */
                 $this.value({
                     ressources: ressources,
-                    object: $this.meta({type: 'Any'},false),
+                    object: $this.meta({},false),
                     end: [Synthetic.Lang.constants._EOS[parentheseless ? 'BRACE' : 'PARENTHESE']]
                 }).then(function(result){
-                    if($this.executing && !$this.isValidateConstraint(result, [{type: 'JSON'}, {type: 'String'}, {type: 'Array'}])){
-                        $this.exception($this.err("Array or JSON or String type expected, "+result.implicitType+" given !"));
+                    if($this.executing && !$this.isValidateConstraint(result, [
+                        {type: Synthetic.Lang.typeFromConstants.JSON.addr}, 
+                        {type: Synthetic.Lang.typeFromConstants.String.addr}, 
+                        {type: Synthetic.Lang.typeFromConstants.Array.addr
+                    }])){
+                        $this.exception($this.err("Array or JSON or String type expected, "+$this.getTypeName(result.implicitType)+" given !"));
                     }
                     /**
                      * Si le syntaxe comporte des parenthèses,
@@ -6145,12 +6282,12 @@ const { type } = require('os');
                                     value: typeof value == 'object' && value != null ? value.value : value
                                 });
                                 $this.meta({
-                                    type: /[\d]+(\.[\d]+)/.test(index) ? 'Number' : 'String',
+                                    type: Synthetic.Lang.typeFromConstants[/[\d]+(\.[\d]+)/.test(index) ? 'Number' : 'String'].addr,
                                     name: 'j',
                                     value: index
                                 });
                                 $this.meta({
-                                    type: 'Number',
+                                    type: Synthetic.Lang.typeFromConstants.Number.addr,
                                     name: 'k',
                                     value: count
                                 });
@@ -6166,7 +6303,7 @@ const { type } = require('os');
                 });
              }
              else if(looptype == types.WHILE){
-                 var fakeObject = $this.meta({type: 'Any'},false),
+                 var fakeObject = $this.meta({},false),
                     reason,scopeCreated = false;
                 _cursor = $this.copy($this.cursor);
                 function until(){
@@ -6207,35 +6344,6 @@ const { type } = require('os');
                             $this.executing = reason;
                             remain = reason ? 2 : 0;
                             executeScope(_char,reason,until);
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                                    
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            
-                            
                         });
                     });
                 }
@@ -6319,15 +6427,15 @@ const { type } = require('os');
                             _cursor = $this.copy($this.cursor);
                             $this.getStructure('currentLoop').argset = true;
                             $this.value({
-                                object: $this.meta({type: 'Any'}, false),
+                                object: $this.meta({}, false),
                                 ressources: ressources,
                                 end: [Synthetic.Lang.constants._EOS[parentheseless ? 'BRACE' : 'PARENTHESE']]
                             }).then(function(object){
                                 
                                 if($this.executing){
-                                    if(['Array','JSON'].indexOf(object.type) < 0 && ['Array','JSON'].indexOf(object.implicitType) < 0){
+                                    if(!$this.isTypeInBaseTypeList(['Array','JSON'],object.type) && !$this.isTypeInBaseTypeList(['Array','JSON'],object.implicitType)){
                                         $this.cursor = $this.copy(_cursor);
-                                        $this.exception($this.err("Array or JSON value expected, " + object.implicitType+" given !"));
+                                        $this.exception($this.err("Array or JSON value expected, " + $this.getTypeName(object.implicitType)+" given !"));
                                     }
                                 }
                                 else{
@@ -6357,7 +6465,8 @@ const { type } = require('os');
                                                     delete $this.getStructure('currentLoop').args[i].value;
                                                 }
                                                 if(i < list.length){
-                                                    if(!$this.isSuitable(list[i],$this.getStructure('currentLoop').args[i]) && (i < 0 || [$this.getStructure('currentLoop').args[i].type, $this.getStructure('currentLoop').args[i].implicitType].indexOf('String') < 0) ){
+                                                    var currentArg = $this.getStructure('currentLoop').args[i];
+                                                    if(!$this.isSuitable(list[i],currentArg) && (i < 0 || !$this.isTypesEqual(currentArg, Synthetic.Lang.typeFromConstants.String) ) ){
                                                         $this.exception($this.err("[ "+$this.getStructure('currentLoop').args[i].name+" ] is not suitable with "+(i > 0 ? "key" : "value")+" of object !"));
                                                     }
                                                     /**
@@ -6404,7 +6513,7 @@ const { type } = require('os');
                                 // console.log('[for][reason]',$this.code.substr($this.cursor.index, 10));
                                 $this.value({
                                     ressources: ressources,
-                                    object: $this.meta({type:'Any'},false),
+                                    object: $this.meta({},false),
                                     end: [Synthetic.Lang.constants._EOS.SEMICOLON]
                                 }).then(function(result){
                                     $this.getStructure('currentLoop').reason = $this.executing ? $this.toBoolean(result.value) : false;
