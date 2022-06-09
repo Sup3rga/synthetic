@@ -1,29 +1,29 @@
-String nom = "bien"
+// String nom = "bien"
 // String test = "Cool"
 // // String bien;
 
-JSON t = {nom : nom}
+// JSON t = {nom : nom}
 
-t.test = test;
+// t.test = test;
 
-print t
+// print t
 
 // Array test = [nom == "Bien" ? 30 : 10 > 3 ? "bien" : "bad", 50]
-JSON<...> ok = { bien : "Ok" + " cool", "pardon" : 5 < 4 ? "Pardon !" : "OOh !",nom}
+// JSON<...> ok = { bien : "Ok" + " cool", "pardon" : 5 < 4 ? "Pardon !" : "OOh !",nom}
 
-print(nom in ok)
-debug ok
+// print(nom in ok)
+// debug ok
 
-ok.bien = "cool"
+// ok.bien = "cool"
 
 // ok.ok = maj "yeah !"
 
 // other = ok
 
-ok.test = (nom){
-    debug "Hello " + nom
-}
-// other.ok = "bien"
+// ok.test = (nom){
+//     debug "Hello " + nom
+// }
+// // other.ok = "bien"
 
 // print ok
 // other.test "Synthetic"
@@ -50,3 +50,6 @@ ok.test = (nom){
 // Number hexa = 0x10
 
 // print hexa + "1x7"
+// Number k = 2
+
+// print(k % 2 == 0)

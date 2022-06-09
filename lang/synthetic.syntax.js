@@ -291,9 +291,9 @@
                 }
                 else if(i != this.rootScope && this.modules[i].modules[j].linked == 0){
                     // console.log('[I]', this.modules[i].modules[j].name)
-                    addr.push(this.modules[i].modules[j].addr);
-                    this.freeLinkOf(this.modules[i].modules[j]);
-                    delete this.modules[i].modules[j];
+                    // addr.push(this.modules[i].modules[j].addr);
+                    // this.freeLinkOf(this.modules[i].modules[j]);
+                    // delete this.modules[i].modules[j];
                 }
             }
         }
@@ -812,7 +812,6 @@
   */
  $syl.setScope = function(scope){
      var len = this.saveScope(typeof scope != 'number');
-     
      if(typeof scope == 'string'){
          this.currentScope = scope;
      }
@@ -1548,23 +1547,23 @@ $syl.clearString = function(value){
          },
          "*": function(a,b){
              var r = compute.hexa['*'](a,b);
-             if(!r){ return r;}
+             if(r){ return r;}
              return $this.toPrimitiveValue(a) * $this.toPrimitiveValue(b);
          },
          "/": function(a,b){
             var r = compute.hexa['/'](a,b);
-            if(!r){ return r;}
+            if(r){ return r;}
              return $this.toPrimitiveValue(a) / $this.toPrimitiveValue(b);
          },
          "~": function(a,b){
             var r = compute.hexa['~'](a,b);
-            if(!r){ return r;}
+            if(r){ return r;}
              return Math.ceil($this.toPrimitiveValue(a) / $this.toPrimitiveValue(b));
          },
          "%": function(a,b){
             var r = compute.hexa['%'](a,b);
-            if(!r){ return r;}
-             return $this.toPrimitiveValue(a) % $this.toPrimitiveValue(b);
+            if(r){ return r;}
+            return $this.toPrimitiveValue(a) % $this.toPrimitiveValue(b);
          },
          "<": function(a,b){
              var r = compute.hexa.parse(a,b);
@@ -2583,7 +2582,7 @@ $syl.clearString = function(value){
                      if(_cursor){
                         $this.cursor = $this.copy(_cursor);
                      }
-                    //  console.log('[Data]',data.object.name);
+                    //  console.log('[Data]',data.object);
                      $this.exception($this.err($this.getTypeName(data.object.type)+" value expected, "+(r ? $this.getTypeName(r.implicitType) : "Any" )+" given !"));
                  }
              }
@@ -3116,10 +3115,10 @@ $syl.clearString = function(value){
                      r += r.length > 1 && array > 1 ? '\n' : '';
                  }
                  else{
-                     r += e && $this.isTypesEqual(e,$this.getBaseType('String')) && n > 0 && !$this.isCallable(e) ? 
+                     r += e && $this.isTypesEqual(e,Synthetic.Lang.typeFromConstants.String) && n > 0 && !$this.isCallable(e) ? 
                                  '"'+e.value+'"' : 
                                  e ? 
-                                     'value' in e ? e.value : e.label+" ["+e.addr+"]"
+                                     'value' in e && !$this.isCallable(e) ? e.value : e.label+" ["+e.addr+"]"
                                       : ""+e;
                  }
                  r += array > 0 ? array ==  1 ? ']' : this.tab(n)+'}' : '';
@@ -3574,7 +3573,7 @@ $syl.clearString = function(value){
                       * Conséquence d'un argument ayant le même nom qu'une fonction définie
                       * alors qu'on le crée dans les paramètres d'un callback
                       */
-                     if(!args.arguments){
+                     if(!args){
                          /**
                           * Si le resultat des arguments est nul on va vérifier:
                           *  * Si 'trynMethodeInstead' est activé, dans ce cas on prendra en compte
@@ -4075,7 +4074,7 @@ $syl.clearString = function(value){
                         loop.stop();
                         $this.litteral(cursor.word,{parent: null},true).then(function(type){
                             if(type && $this.isType(type)){
-                                if(arg.name || calling || (serial.label == 'external' && type.name != 'Any')){
+                                if(arg.name || calling || (serial.label == 'external' && !$this.isTypesEqual(type, Synthetic.Lang.typeFromConstants.Any))){
                                     if(serial.label == 'external'){
                                         $this.exception("externals function don't support other type than Any");
                                     }
@@ -4084,13 +4083,12 @@ $syl.clearString = function(value){
                                 if(arg.external && type.type != 'Any'){
                                     $this.exception($this.err("syntax error, external don't support other type than Any !"),true);
                                 }
-                                arg.type = type.type;
-                                arg.implicitType = type.type;
+                                arg.type = type.addr;
+                                arg.implicitType = type.addr;
                                 _typeset = true;
-                                arg.typeOrigin = type.origin,
                                 $this.toNextChar().then(function(char){
                                     if(char == '<'){
-                                        $this.genericType(type.type).then(function(generic){
+                                        $this.genericType(type.addr).then(function(generic){
                                             arg.constraints = generic.constraints;
                                             loop.start();
                                         });
@@ -4107,7 +4105,6 @@ $syl.clearString = function(value){
                                 arg.name = cursor.word;
                                 if(['\n', ' '].indexOf(cursor.char) >= 0){
                                     $this.toNextChar().then(function(_char){
-                                        
                                         saveArgument({char:_char, word: cursor.word}, loop).then(function(){
                                             loop.start();
                                         });
@@ -4116,7 +4113,6 @@ $syl.clearString = function(value){
                                 }
                                 
                                 saveArgument(cursor,loop).then(function(){
-                                    
                                     loop.start();
                                 });
                             }
@@ -4577,6 +4573,7 @@ $syl.clearString = function(value){
             // console.log('[Block]',_curr,$this.modules[$this.currentScope]);
          }
 
+        
          if(MegaScope && !ref){
             /**
              * Si la Mégastructure est static, tous ses membres doivent être aussi static
@@ -4614,7 +4611,7 @@ $syl.clearString = function(value){
                  assignType = null;
              }
          }
-         if(redefinition && exist && (resultValue.constant || resultValue.final) ) {
+         if(redefinition && exist && (resultValue.constant || resultValue.final) ){
              $this.exception($this.err("cannot override [ "+litteral+" ] declared previously as "+(resultValue.constant ? 'constant' : 'final')+" !"));
          }
          _cursor = $this.copy($this.cursor);
@@ -4656,7 +4653,7 @@ $syl.clearString = function(value){
                             $this.cursor = $this.copy(_cursor);
                             $this.exception($this.err("Cannot read property [ "+nextWord+" ] of null"));
                         }
-                        console.log('[Result]',resultValue);
+                        // console.log('[Result]',resultValue);
                         if($this.containsKey(nextWord,resultValue)){
                             resultValue = resultValue.value[nextWord];
                             _cursor = $this.copy($this.cursor);
@@ -4695,6 +4692,7 @@ $syl.clearString = function(value){
                  if(cursor.word && cursor.word.length && !dotted){
                      $this.cursor = _cursor;
                  }
+
                  if(['=','+=','-=','/=','*=','~=', '--', '++'].indexOf(cursor.char) >= 0){
                      /**
                       * Si on recherche des arguments pour la boucle for ... in
@@ -4738,7 +4736,6 @@ $syl.clearString = function(value){
                      }
                      
                      if(settingKey){
-                         
                          _scopeKey.push($this.setScope(settingKeyObject.childScope));
                          _scopeKey.push($this.saveScope());
                          _scopeKey.push($this.setScope(settingKeyObject.cursor.scope + 1));
@@ -4800,13 +4797,13 @@ $syl.clearString = function(value){
                                       * Si c'est un callable
                                       * On doit vérifier que le type de retour n'est pas multiple
                                       */
-                                     
+                                    //  console.log('[KEY]', result, settingKey);
                                      if($this.isCallable(result) && serial.constraints && serial.constraints.value.length > 1 && !$this.isValidateConstraint(Synthetic.Lang.typeFromConstants.Any, serial.constraints.value)){
                                          $this.cursor = $this.copy(_cursor);
                                          $this.exception($this.err("too much return value types !"));
                                      }
+
                                      settingKeyObject.value[settingKey.name] = $this.extend(settingKey, $this.copy(result));
-                                     
                                      if(serial.constraints){
                                          /**
                                           * Si le resulta est un external, on vérifier qu'il n'y a acceptation que
@@ -4833,9 +4830,9 @@ $syl.clearString = function(value){
                                              $this.exception($this.err($this.toStringTypes(serial.constraints.value)+" value expected, "+$this.getTypeName(result.implicitType)+" given !"));
                                          }
                                      }
-                                     $this.restoreScope(_scopeKey[1]);
-                                     _scopeKey.pop();
                                      $this.save(settingKey);
+                                     $this.restoreScope(_scopeKey);
+                                     _scopeKey = [];
                                  }
                                  else{
                                      var tmp = {
@@ -5098,6 +5095,7 @@ $syl.clearString = function(value){
                              return;
                          }
                          else{
+                            //  console.log('[Modules]',$this.currentScope, $this.modules)
                             //  console.log('[Code]',$this.code.substr($this.cursor.index, 10));
                              $this.exception($this.err("[ "+litteral+" ] is undefined !"));
                          }
@@ -5135,13 +5133,11 @@ $syl.clearString = function(value){
                          if(cursor.char.length && /[\S]+/.test(cursor.char)){
                              $this.backTo(cursor.char.length - (cursor.char.length == 1 ? 1 : 0));   
                          }
-                        
                          $this.linkWith(resultValue);
                          loop.end();
                      }
                      else{
                          $this.goTo(1);
-                
                          loop.start();
                      }
                  }
@@ -5548,9 +5544,13 @@ $syl.clearString = function(value){
                       * en vérifiant qu'il bien une classe ou une interface
                       */
                     loop.stop();
-                     $this.litteral(cursor.word, ressources).then(function(old){
+                    _addrKey.push($this.setObjectAddr(null));
+                     $this.litteral(cursor.word, ressources,true).then(function(old){
                         console.log('[Old]',old);
-                        // if(['class', 'interface'].indexOf(old.name))
+                        $this.restoreObjectAddr(_addrKey.pop());
+                        if(extending && (old.label != 'class' || serial.label == 'interface')){
+
+                        }
                         // if(old && old.constant){
                         //     $this.exception($this.err("Violation error from trying to rewrite class "+old.name+" defined at file: "+old.origin));
                         // }

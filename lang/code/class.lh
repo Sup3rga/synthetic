@@ -50,7 +50,7 @@ print(master.getNom(),"-",mister.getNom())
 // print master.nom
 // print mister.nom
 
-static class Maitre{
+static class Maitre extends Master{
     static test(){
         print "Ceci est une classe !"
     }
