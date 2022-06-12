@@ -38,22 +38,22 @@ const class Master{
     }
 }
 
-Master master = Master("Pierre"),
-       mister = Master("Jhon");
+Master master = Master("Pierre")
+//        mister = Master("Jhon");
     
-master.setNom("Julien")
-// master.sePresenter(false,"Ok !", false)
-master.sePresenter(50)
-// master.sePresenter()
+// master.setNom("Julien")
+// // master.sePresenter(false,"Ok !", false)
+// master.sePresenter(50)
+// // master.sePresenter()
 
-print(master.getNom(),"-",mister.getNom())
-// print master.nom
-// print mister.nom
+// print(master.getNom(),"-",mister.getNom())
+// // print master.nom
+// // print mister.nom
 
-static class Maitre extends Master{
-    static test(){
-        print "Ceci est une classe !"
-    }
-}
+// static class Maitre extends Master{
+//     static test(){
+//         print "Ceci est une classe !"
+//     }
+// }
 
-Maitre.test()
+// Maitre.test()

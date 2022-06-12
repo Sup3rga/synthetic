@@ -2899,15 +2899,16 @@ $syl.clearString = function(value){
  /**
   * La méthode createBlock permet de créer virtuellement un block d'attachement d'objets
  */
- $syl.createBlock = function(autoReplace, struct){
+ $syl.createBlock = function(autoReplace, struct, parent){
      if(!this.executing){
          return;
      }
      var scope = this.addr(),
          struct = this.set(struct,null),
+         parent = this.set(parent, this.currentScope),
          autoReplace = this.set(autoReplace, true);
      this.modules[scope] = {
-         parent: this.currentScope,
+         parent: parent,
          besides: [],
          structure: struct,
          modules: {}
@@ -3051,7 +3052,17 @@ $syl.clearString = function(value){
      if(!object){
          this.exception(this.err("cant read [ "+key+" ] property of null"));
      }
-     return typeof object.value[key] != 'undefined';
+     var r = false;
+     if(object.label == 'object'){
+        // console.log('[Object]',object);
+     }
+     else{
+         r = typeof object.value[key] != 'undefined'; 
+     }
+     return r;
+ }
+ $syl.getValueOf = function(key, object){
+
  }
  /**
   * La méthode cursorOrigin permet de trouver la ligne approximative dans laquelle se
@@ -3428,40 +3439,36 @@ $syl.clearString = function(value){
          }
      });
  }
- $syl.createInstance = function(classSrc){
-    var addr = this.createBlock(true, classSrc.addr),
-        obj,values = {}, surchages;
-    // console.log('[Create]', this.currentScope);
+ $syl.createInstance = function(classSrc, parentInstance){
+    var parents = [], parent,
+        parentInstance = this.set(parentInstance, false);
+        
+    for(var i in classSrc.supertypes){
+        parent = this.getObjectFromAddr(classSrc.supertypes[i]);
+        if(parent.label == 'class'){
+            parents.push(this.createInstance(parent));
+        }
+    }
+    var addr = this.createBlock(true, classSrc.addr, this.modules[classSrc.module].parent),
+        obj;
     for(var i in classSrc.members){
         obj = Synthetic.Lang.objects[classSrc.members[i]];
         if(!obj.static){
             obj = this.copy(obj);
             obj.addr = this.addr();
             obj.parent = this.currentScope;
-            // if(this.isCallable(obj)){
-            //     for(var i in obj.signatures){
-            //         surchages = this.copy(Synthetic.Lang.objects[obj.signatures[i]]);
-            //         surchages.addr = this.addr();
-            //         surchages.parent = this.currentScope;
-            //         this.save(surchages);
-            //         obj.signatures[i] = surchages.addr;
-            //     }
-            // }
         }
         this.save(obj);
-        if(obj.visible){
-            // console.log('[create][obj]',obj.name, 'exist=>', Synthetic.Lang.objects[obj.addr] == obj);
-            values[i] = obj;
-        }
     }
-    // console.log('[instance]',classSrc, this.modules);
-    return {
-        values : values, 
-        type: classSrc.type, 
+    return this.extend({
+        addr : addr, 
+        parents: parents
+    }, parentInstance ? {} : {
+        type: classSrc.type,
         scope: this.currentScope, 
         replaceScope: null,
         instanciation: true
-    };
+    });
  }
  $syl.definedUsingSignature = function(method, args){
     var list = [], $this = this, len = $this.len(args),r;
@@ -3628,6 +3635,7 @@ $syl.clearString = function(value){
                             var defaultCallable = callable;
                             callable = args.signature;//$this.getSignature(callable, args.signature);
                             args = args.arguments;
+                            console.log('[VAL***********]')
                             // console.log('[Callable]',args);
                             // $this.definedUsingSignature(callable,args);
                             if(!callable){
@@ -5487,7 +5495,6 @@ $syl.clearString = function(value){
              abstract: $this.access.abstract,
              final: $this.access.final,
              _constructor: null,
-             superclass: [],
              supertypes: [],
              members: {},
              value: {}
@@ -5545,12 +5552,43 @@ $syl.clearString = function(value){
                       */
                     loop.stop();
                     _addrKey.push($this.setObjectAddr(null));
-                     $this.litteral(cursor.word, ressources,true).then(function(old){
-                        console.log('[Old]',old);
+                     $this.litteral(cursor.word, ressources,true).then(function(_super){
                         $this.restoreObjectAddr(_addrKey.pop());
-                        if(extending && (old.label != 'class' || serial.label == 'interface')){
-
+                        if(['class','interface'].indexOf(_super.label) < 0){
+                            $this.exception($this.err("[ "+_super.name+" ] was not defined as a class or interface"));
                         }
+                        if(_super.final){
+                            $this.exception($this.err("[ "+_super.name+" ] is declared final !"));
+                        }
+                        if(extending){
+                            if(serial.label != _super.label){
+                                $this.exception($this.err("[ "+_super.name+" ] was not defined as "+serial.label));
+                            }
+                        }
+                        if(implementing){
+                            if(_super.label != 'interface'){
+                                $this.exception($this.err("[ "+_super.name+" ] was not defined as interface"));
+                            }
+                            if(serial.label == 'interface'){
+                                $this.exception($this.err("[ "+serial.name+" ] can not implement another interface"));
+                            }
+                        }
+                        serial.supertypes.push(_super.addr);
+                        $this.toNextChar().then(function(_char){
+                            console.log('[Char]',_char);
+                            if(_char == ','){
+                                
+                            }
+                            else if(_char == '<'){
+
+                            }
+                            else if(_char == '{'){
+
+                            }
+                            else{
+                                $this.exception($this.err("Illegal character [ "+_char+" ]"), true);
+                            }
+                        });
                         // if(old && old.constant){
                         //     $this.exception($this.err("Violation error from trying to rewrite class "+old.name+" defined at file: "+old.origin));
                         // }
@@ -5589,6 +5627,7 @@ $syl.clearString = function(value){
                      y : $this.cursor.lines.y,
                  };
                  $this.createBlock(true,serial.addr);
+                 serial.module = $this.currentScope;
                 //  console.log('[class]',serial.addr);
                  loop.stop();
                  $this.goTo(1);
