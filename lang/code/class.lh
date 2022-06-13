@@ -1,5 +1,5 @@
 const class Master{
-    private String nom = "Jean";
+    protected String nom = "Jean";
     private Boolean ok = false;
     
     Master(){
@@ -38,11 +38,11 @@ const class Master{
     }
 }
 
-Master master = Master("Pierre")
-//        mister = Master("Jhon");
+Master master = Master("Pierre"),
+       mister = Master("Jhon");
     
 // master.setNom("Julien")
-// // master.sePresenter(false,"Ok !", false)
+// master.sePresenter(false,"Ok !", false)
 // master.sePresenter(50)
 // // master.sePresenter()
 
@@ -50,10 +50,19 @@ Master master = Master("Pierre")
 // // print master.nom
 // // print mister.nom
 
-// static class Maitre extends Master{
-//     static test(){
-//         print "Ceci est une classe !"
-//     }
-// }
+class Maitre extends Master{
+    static test(){
+        print "Ceci est une classe !"
+    }
+    croiser(Maitre e){
+        print "J'agis en tant que " + e.getNom()
+    }
+}
 
-// Maitre.test()
+Maitre lens = Maitre(),
+       superga = Maitre()
+
+lens.setNom("Lens")
+superga.setNom("Superga")
+lens.croiser superga
+lens.test()
