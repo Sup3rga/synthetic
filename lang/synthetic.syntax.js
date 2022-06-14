@@ -11,7 +11,7 @@
          'if', 'import', 'from', 'include', 'into', 'in', 'to', 'if', 'elif',
          'else', 'while', 'loop', 'return', 'break','continue','try','catch', 'mixin', 'use',
          'extends', 'with', 'require', 'slimPhase', 'private','unused', 'const',
-         'unset', 'export','upper','root','external', 'async', 'return', '@js', 'label',
+         'unset', 'export','upper','root','external', 'async', 'return', 'label',
          'for', 'while', 'loop', 'override', 'switch','case','default', 'strict_mode',
          'final', 'invoke', 'reset', 'await', '@MixinActing', '@SyncBlockRender',
          'class', 'interface', 'trait', 'protected', 'this','super', 'abstract', 'static',
@@ -2222,7 +2222,7 @@ $syl.clearString = function(value){
                          });
                          return;
                      }
-                     else if(cursor.word == 'this'){
+                     else if(['this','super'].indexOf(cursor.word) >= 0){
                          loop.stop();
                          $this.litteral(cursor.word, data.ressources).then(function(result){
                             if(['--','++'].indexOf($this.code.substr($this.cursor.index - 3, 2)) >= 0){
@@ -3076,8 +3076,9 @@ $syl.clearString = function(value){
          parent = this.set(parent, false);
      if(object.label == 'object'){
         //  console.trace('[Objects]',object);
-         var mod = this.modules[object.object.addr].modules;
-         r = mod[key];
+         if( (object.name != 'super' && !parent) || parent){
+            r = this.modules[object.object.addr].modules[key];
+         }
          if(!r){
             for(var i in object.object.parents){
                 r = this.containsKey(key, {
@@ -3092,7 +3093,7 @@ $syl.clearString = function(value){
             }
          }
          else{
-             r = object.name == 'this' && (!parent || r.protected) ? true : r.visible;
+             r = (object.name == 'super' && parent) || (object.name == 'this' && (!parent || r.protected)) ? true : r.visible;
          }
      }
      else{
@@ -3100,17 +3101,21 @@ $syl.clearString = function(value){
      }
      return r;
  }
- $syl.getValueOf = function(key, object){
+ $syl.getValueOf = function(key, object,parent){
     if(!object){
         this.exception(this.err("cant read [ "+key+" ] property of null"));
     }
     var r = null,
         parent = this.set(parent, false);
     if(object.label == 'object'){
-        var mod = this.modules[object.object.addr].modules,
-            _r = null,
-            internal = object.name == 'this';
-        r = mod[key];
+        var _r = null,
+            internal = {
+                current: object.name == 'this',
+                parent: object.name == 'super'
+            };
+        if( (!internal.parent && !parent) || parent){
+            r = this.modules[object.object.addr].modules[key];
+        }
         if(!r){
            for(var i in object.object.parents){
                _r =  this.getValueOf(key, {
@@ -3125,9 +3130,8 @@ $syl.clearString = function(value){
                }
            }
         }
-        r = parent && r && !r.protected ? null : r;
-        // console.log('[Key]',key);
-        if(!parent && (!r || (!r.visible && !internal) ) ){
+        r = !internal.parent && parent && r && !r.protected && !r.visible ? null : r;
+        if(!internal.parent && !parent && (!r || (!r.visible && !internal.current) ) ){
             this.exception(this.err("[ "+key+" ] is not visible to [ "+object.name+" ]"));
         }
     }
@@ -3163,6 +3167,10 @@ $syl.clearString = function(value){
   */
  $syl.isCallable = function(object, more){
      more = this.set(more,false);
+     if(object && this.getStructure('constructorContext') && object.label == 'object' && ['this','super'].indexOf(object.name) >= 0){
+        //  console.log('[Ctx]',this.getStructure('constructorContext'),object);
+         return true;
+     }
      return object && ['function','external', more ? 'class' : ''].indexOf(object.label) >= 0;
  }
  /**
@@ -3545,6 +3553,43 @@ $syl.clearString = function(value){
     });
     return obj;
  }
+ $syl.setInstanceTrace = function(addr,method){
+    var megastruct = null, _instanceKey = -1;
+    if(this.modules[addr].structure in Synthetic.Lang.objects){
+        var object = this.modules[addr],
+            method = this.set(method,false);
+        megastruct = Synthetic.Lang.objects[object.structure];
+       //  console.log('[MegaStruct]',megastruct);
+        instance = {
+           values : {}, 
+           type: megastruct.type, 
+           scope: addr, 
+           replaceScope: null,
+           instanciation: false
+        }
+    }
+    if(megastruct && method){
+       _instanceKey = this.setStructure('instance', this.meta({
+           label: 'object',
+           name: 'this',
+           type: megastruct.type,
+           implicitType: megastruct.type,
+           value: null,
+           object: {
+               addr: addr,
+               parents: object.besides,
+               scope: addr
+           }
+       },false));
+    }
+    else{
+       _instanceKey = this.setStructure('instance', null);
+    }
+    return {
+        _instanceKey: _instanceKey,
+        instance : instance
+    }
+ }
  $syl.definedUsingSignature = function(method, args){
     var list = [], $this = this, len = $this.len(args),r;
     function compatible(method){
@@ -3612,8 +3657,8 @@ $syl.clearString = function(value){
       * On sauvegarde le scope actuel pour le restaurer plus tard
       */
      var key = [$this.saveScope(true)],
-         instance = null,
-         _instanceKey = [], defaultConstruct = false,
+         instance = null, noReturn = false,
+         _instanceKey = [$this.saveStructure('constructorContext')], defaultConstruct = false,
          _cursor = $this.copy($this.cursor);
      if(callable.label == 'class'){
          instance = $this.createInstance(callable);
@@ -3629,6 +3674,7 @@ $syl.clearString = function(value){
                  scope: instance.scope
              }
          },false)));
+         _instanceKey.push($this.setStructure('constructorContext', true));
          key.push($this.setScope(instance.scope));
          callable = callable._constructor;
          if(!callable){
@@ -3639,38 +3685,23 @@ $syl.clearString = function(value){
              defaultConstruct = true;
          }
      }
+     /**
+      * Si on fait appel au constructeur d'une classe à traver les objets 'this', 'super'
+      */
+     else if(callable.label == 'object'){
+         _instanceKey.push($this.setStructure('constructorContext', false));
+         var addr = callable.name == 'super' ? callable.object.parents[0].addr : callable.object.addr,
+            setting = this.setInstanceTrace(addr,true);
+         instance = setting.instance;
+         _instanceKey.push(setting._instanceKey);
+         callable = this.getObjectFromAddr(this.modules[addr].structure)._constructor;
+         noReturn = true; /** Empêche de vérifier la valeur de retour */
+     }
      else if(callable.parent in this.modules){
-        //  console.log('[CALLER]',callable);
-         var megastruct = null;
-         if(this.modules[callable.parent].structure in Synthetic.Lang.objects){
-             var object = this.modules[callable.parent];
-             megastruct = Synthetic.Lang.objects[object.structure];
-            //  console.log('[MegaStruct]',megastruct);
-             instance = {
-                values : {}, 
-                type: megastruct.type, 
-                scope: callable.parent, 
-                replaceScope: null,
-                instanciation: false
-             }
-         }
-         if(megastruct && callable.method){
-            _instanceKey.push($this.setStructure('instance', $this.meta({
-                label: 'object',
-                name: 'this',
-                type: megastruct.type,
-                implicitType: megastruct.type,
-                value: null,
-                object: {
-                    addr: callable.parent,
-                    parents: object.besides,
-                    scope: callable.parent
-                }
-            },false)));
-         }
-         else{
-            _instanceKey.push($this.setStructure('instance', null));
-         }
+        _instanceKey.push($this.setStructure('constructorContext', false));
+         var setting = this.setInstanceTrace(callable.parent,callable.method);
+         instance = setting.instance;
+         _instanceKey.push(setting._instanceKey);
         //  console.log('[GOT]',callable,callable.parent);
      }
      return new Promise(function(res){
@@ -3798,7 +3829,7 @@ $syl.clearString = function(value){
                                     if(!response){
                                         response = $this.toVariableStructure(response,ressources);
                                     }
-                                    if(!$this.isValidateConstraint(response, callable.type)){
+                                    if(!$this.isValidateConstraint(response, callable.type) && !noReturn){
                                         $this.exception($this.err(" "+callable.type+" expected, "+$this.getTypeName(response.type)+" given"));
                                     }
                                 }
@@ -4159,7 +4190,7 @@ $syl.clearString = function(value){
                              return;
                          }
                      }
-                     else if(cursor.word == 'this'){
+                     else if(['this','super'].indexOf(cursor.word) >= 0){
                          if(calling){
                              loop.stop();
                              $this.litteral(cursor.word,ressources).then(function(result){
@@ -4681,19 +4712,19 @@ $syl.clearString = function(value){
 
         //  console.log('[Litteral]',litteral, exist);
          
-         if(litteral == 'this'){
+         if(['this','super'].indexOf(litteral) >= 0){
             //  console.log('[Keys]',usingObjectKey, $this.getStructure('instance'));
             //  console.log('__[Scope]',this.currentScope);
             if($this.executing){
              _currentObjectInUse = $this.getStructure('instance');
              if(!_currentObjectInUse){
-                 $this.exception($this.err("[ this ] does not point to any structure !"));
+                 $this.exception($this.err("[ "+litteral+" ] does not point to any structure !"));
              }
             //  console.log('[Object]',_currentObjectInUse);
              serial = $this.meta({
                  type: _currentObjectInUse.object.type,
                  label: 'object',
-                 name: 'this',
+                 name: litteral,
                  value: _currentObjectInUse.value,
                  object: _currentObjectInUse.object
              },false);
@@ -5249,7 +5280,7 @@ $syl.clearString = function(value){
                              $this.exception($this.err("[ "+litteral+" ] is undefined !"));
                          }
                      }
-                     if(exist && resultValue && $this.isCallable(resultValue)){
+                     if(exist && resultValue && $this.isCallable(resultValue) && !dotted){
                          if(called){
                              if(cursor.char.length && /[\S]+/.test(cursor.char)){
                                 
@@ -5798,6 +5829,14 @@ $syl.clearString = function(value){
      var $this = this;
      return new Promise(function(res){
          $this.litteral('this', ressources).then(function(result){
+            res(result);
+         })
+     });
+ }
+ $syl.super = function(ressources){
+    var $this = this;
+     return new Promise(function(res){
+        $this.litteral('super', ressources).then(function(result){
             res(result);
          })
      });

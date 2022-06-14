@@ -19,6 +19,10 @@ const class Master{
         return this
     }
 
+    private String getFullName(){
+        return "Mr. "+ nom
+    }
+
     String getNom() return nom
 
     String getNom(Boolean cap) return cap ? maj(nom) : nom
@@ -59,6 +63,8 @@ class Maitre extends Master{
     private static Number total = 0
     
     Maitre(){
+        super("Julius")
+        print "{Nom} "+ super.nom
         total++
     }
     static cool(){
@@ -69,7 +75,7 @@ class Maitre extends Master{
     }
     croiser(Master e){
         // sePresenter(false)
-        print "Je travaille avec " + e.getNom()
+        print "Je travaille avec " + super.getFullName()
         print "J'agis en tant que " + getNom()
         return this
     }
@@ -78,7 +84,7 @@ class Maitre extends Master{
 Maitre lens = Maitre(),
        superga = Maitre()
 superga.setNom("Superga")
-lens.setNom("Lens")
+// lens.setNom("Lens")
 lens.croiser(superga)
 // .test()
 Maitre.test()
