@@ -1,5 +1,5 @@
 const class Master{
-    protected String nom = "Jean";
+    private String nom = "Jean";
     private Boolean ok = false;
     
     Master(){
@@ -14,9 +14,14 @@ const class Master{
         print "Hello ! default " + this.nom
     }
 
-    setNom(String noms) this.nom = noms
+    setNom(String noms){
+        this.nom = noms
+        return this
+    }
 
-    getNom() return nom
+    String getNom() return nom
+
+    String getNom(Boolean cap) return cap ? maj(nom) : nom
     
     Any sePresenter(String prenom){
         print "Hello everyone ! I'm " + nom + " - " + prenom
@@ -51,18 +56,29 @@ Master master = Master("Pierre"),
 // // print mister.nom
 
 class Maitre extends Master{
-    static test(){
-        print "Ceci est une classe !"
+    private static Number total = 0
+    
+    Maitre(){
+        total++
     }
-    croiser(Maitre e){
-        print "J'agis en tant que " + e.getNom()
+    static cool(){
+        print "Je suis cool"
+    }
+    static test(){
+        print "Ceci est une classe ! " + total + " instance" +(total > 1 ? "s" : "")
+    }
+    croiser(Master e){
+        // sePresenter(false)
+        print "Je travaille avec " + e.getNom()
+        print "J'agis en tant que " + getNom()
+        return this
     }
 }
 
 Maitre lens = Maitre(),
        superga = Maitre()
-
-lens.setNom("Lens")
 superga.setNom("Superga")
-lens.croiser superga
-lens.test()
+lens.setNom("Lens")
+lens.croiser(superga)
+// .test()
+Maitre.test()

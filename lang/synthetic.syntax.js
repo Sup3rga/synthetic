@@ -1297,8 +1297,18 @@
             type: this.isType(type2) ? type2 : this.isAddr(type2.type) ? new Synthetic.Lang.Reference(type2.type).getObject() : type2.type,
             alt: this.isType(type2) ? type2 : this.isAddr(type2.implicitType) ? new Synthetic.Lang.Reference(type2.implicitType).getObject() : type2.implicitType,
         };
-        var r = type1.type == type2.type || type1.alt == type2.alt || 
-            type1.type == type2.alt || type1.alt == type2.type;
+        var r = this.isTypeDescendant(type1.type,type2.type) || 
+                this.isTypeDescendant(type1.alt,type2.alt) ;
+                // || 
+                // type1.type == type2.alt || type1.alt == type2.type
+                ;
+        // console.log('[Types]',{
+        //     type1: this.getTypeName(type1.type),
+        //     alt1: this.getTypeName(type1.alt),
+        //     type2: this.getTypeName(type2.type),
+        //     alt2: this.getTypeName(type2.alt),
+        //     r : r
+        // })
     return r;
  }
  $syl.isTypeDescendant = function(type, ref){
@@ -1312,7 +1322,7 @@
      */
     if(!r && typeCHK){
         for(var i in type.supertypes){
-            r = this.isTypeDescendant(ref, type.supertypes[i]);
+            r = this.isTypeDescendant(type.supertypes[i], ref);
             if(r){
                 break;
             }
@@ -3003,7 +3013,7 @@ $syl.clearString = function(value){
  /**
   * La méthode fin permet de trouver une objet synthetic
   */
- $syl.find = function(name){
+ $syl.find = function(name,scope,lookUpper){
      if(Synthetic.Lang.nativeFunctions.indexOf(name) >= 0){
          return this.meta({
              name: name,
@@ -3016,17 +3026,34 @@ $syl.clearString = function(value){
      }
      else{
          var $this = this,
-             scope = this.currentScope,
+             scope = this.set(scope,this.currentScope),
+             lookUpper = this.set(lookUpper,true),
              r = null;
          if(!(scope in this.modules)){
              return r;
+         }
+         function findBeside(name,_module){
+             var response = null, r;
+             if('besides' in _module){
+                for(var i in _module.besides){
+                    r = $this.find(name, _module.besides[i].addr,false);
+                    if(r){
+                        response = r;
+                    }
+                }
+             }
+             if(response){
+                 response = response.visible || response.protected ? response : null;
+             }
+            return response;
          }
          while(!r){
              if(name in this.modules[scope].modules){
                  r = this.modules[scope].modules[name];
              }
              else{
-                 if(this.modules[scope].parent != null){
+                 r = findBeside(name, this.modules[scope]);
+                 if(this.modules[scope].parent != null && lookUpper && !r){
                      scope = this.modules[scope].parent;
                  }
                  else{
@@ -3069,7 +3096,7 @@ $syl.clearString = function(value){
          }
      }
      else{
-         r = typeof object.value[key] != 'undefined'; 
+         r = object && object.value && typeof object.value[key] != 'undefined'; 
      }
      return r;
  }
@@ -3105,7 +3132,7 @@ $syl.clearString = function(value){
         }
     }
     else{
-        r = object.value[key]; 
+        r = object && object.value ? object.value[key] : null; 
     }
     return r;
  }
@@ -3495,26 +3522,28 @@ $syl.clearString = function(value){
         }
     }
     var addr = this.createBlock(true, classSrc.addr, this.modules[classSrc.module].parent),
-        obj, signature;
+        obj;
     for(var i in classSrc.members){
         obj = this.getObjectFromAddr(classSrc.members[i]);
         if(!obj.static){
             obj = this.copy(obj);
             obj.addr = this.addr();
+            obj.method = true;
             obj.parent = this.currentScope;
         }
         this.save(obj);
     }
-    // console.log('[OBJECT]',this.currentScope, parents);
-    return this.extend({
+    this.modules[this.currentScope].besides = parents;
+    obj = this.extend({
         addr : addr, 
-        parents: parents
+        parents: parents,
     }, parentInstance ? {} : {
         type: classSrc.type,
         scope: this.currentScope, 
         replaceScope: null,
         instanciation: true
     });
+    return obj;
  }
  $syl.definedUsingSignature = function(method, args){
     var list = [], $this = this, len = $this.len(args),r;
@@ -3612,8 +3641,11 @@ $syl.clearString = function(value){
      }
      else if(callable.parent in this.modules){
         //  console.log('[CALLER]',callable);
+         var megastruct = null;
          if(this.modules[callable.parent].structure in Synthetic.Lang.objects){
-             var megastruct = Synthetic.Lang.objects[this.modules[callable.parent].structure];
+             var object = this.modules[callable.parent];
+             megastruct = Synthetic.Lang.objects[object.structure];
+            //  console.log('[MegaStruct]',megastruct);
              instance = {
                 values : {}, 
                 type: megastruct.type, 
@@ -3621,6 +3653,23 @@ $syl.clearString = function(value){
                 replaceScope: null,
                 instanciation: false
              }
+         }
+         if(megastruct && callable.method){
+            _instanceKey.push($this.setStructure('instance', $this.meta({
+                label: 'object',
+                name: 'this',
+                type: megastruct.type,
+                implicitType: megastruct.type,
+                value: null,
+                object: {
+                    addr: callable.parent,
+                    parents: object.besides,
+                    scope: callable.parent
+                }
+            },false)));
+         }
+         else{
+            _instanceKey.push($this.setStructure('instance', null));
          }
         //  console.log('[GOT]',callable,callable.parent);
      }
@@ -3929,7 +3978,13 @@ $syl.clearString = function(value){
                      }
                     //  if(!result) console.log('[Value]', $this.executing, serial)
                      arg.implicitType = result.implicitType;
-                     arg.value = result.value;
+                     if(result.label == 'object'){
+                        arg.label = result.label;
+                        arg.object = result.object;
+                     }
+                     else{
+                         arg.value = result.value;
+                     }
                      arg.index = index;
                      index++;
                      arg.name = cursor.word;
@@ -4492,6 +4547,7 @@ $syl.clearString = function(value){
                 v = 0; f = false;
                 for(var j in a.arguments){
                     if(k == v){
+                        // console.log('[KV]',$this.getTypeName(a.arguments[j].type), $this.getTypeName(b.arguments[i].type))
                         same.argtype = $this.isTypesEqual(a.arguments[j],b.arguments[i]);
                         if(same.argtype){
                             break;
@@ -4511,6 +4567,9 @@ $syl.clearString = function(value){
     r = compare(base,next);
     r = r.type && r.argtype;
     if(!r){
+        if(base.signatures.length){
+            // console.log('[Signatures]',{base,next});
+        }
         for(var i in base.signatures){
             r = compare(Synthetic.Lang.objects[base.signatures[i]], next);
             r = r.type && r.argtype;
@@ -4936,6 +4995,7 @@ $syl.clearString = function(value){
                                      }
                                      serial.implicitType = result.implicitType;
                                      if(["function", 'external', 'object'].indexOf(result.label) >= 0){
+                                        //  console.log('[OBJECT]',result.object, $this.getTypeName(result.type));
                                          serial.label = result.label;
                                      }
                                      _cursor = $this.copy($this.cursor);
@@ -5033,15 +5093,15 @@ $syl.clearString = function(value){
                           * Si c'est un object auquel on accède à une de ses méthodes
                           * on laisse sa trace dans l'objet en cours
                           */
-                         if(previousObject && previousObject.label == 'object'){
-                            usingObjectKey.push($this.setStructure('instance', previousObject));
-                         }
+                        //  if(previousObject && previousObject.label == 'object'){
+                        //     usingObjectKey.push($this.setStructure('instance', previousObject));
+                        //  }
                          $this.caller(resultValue,ressources).then(function(result){
                              resultValue = result;
                              
                              _cursor = $this.copy($this.cursor);
                              called = true;
-                             $this.restoreStructure('instance', usingObjectKey);
+                            //  $this.restoreStructure('instance', usingObjectKey);
                              if($this.code[$this.cursor.index] == ';'){
                                  loop.end();
                                  return;
@@ -5657,15 +5717,19 @@ $syl.clearString = function(value){
                                 $this.exception($this.err("[ "+serial.name+" ] can not implement another interface"));
                             }
                         }
-                        serial.supertypes.push(_super.addr);
+                        if(extending && !implementing){
+                            serial.supertypes.push(_super.addr);
+                        }
+                        else if(implementing){
+                            console.log('[Super]',_super);
+                        }
                         $this.toNextChar().then(function(_char){
                             if(_char == ','){
-                                
+                                if(extending && !implementing){
+                                    $this.exception($this.err("Illegal character [ "+_char+" ]"));
+                                }
                             }
-                            else if(_char == '<'){
-
-                            }
-                            else if(_char == '{'){
+                            else if(_char == '<' || _char == '{'){
                                 // console.log('[Char]',_char);
                                 loop.start();
                             }
