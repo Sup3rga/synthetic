@@ -5,23 +5,25 @@ test = {
 }
 // test = {}
 // print test
-
-loop (test) {
-    /**
-      i : value
-      j : key,
-      k : occurence
-    */
-    print "Bonjour ! " + j + " => " + i + " : " + k
-    if k == 0 {
-        continue
-    }
-    elif k == 1{
-        break
-    }
-    // continue
-    print "cool"
-}
+// for String i in test {
+//     print "[I]" + i
+// }
+// loop (test) {
+//     /**
+//       i : value
+//       j : key,
+//       k : occurence
+//     */
+//     print "Bonjour ! " + j + " => " + i + " : " + k
+//     if k == 0 {
+//         continue
+//     }
+//     elif k == 1{
+//         break
+//     }
+//     // continue
+//     print "cool"
+// }
 // Number k = 0
 // while k < 5 {
 //     print ("[K] " + k);
@@ -44,15 +46,9 @@ loop (test) {
 //     k++
 // }
 
-// try{
-//     print "Cool !"
-// }
-// catch(e){
-//     print "[NON] " + e
-// }
 for(Number i = 2; i < 5; i++){
     for Number j = i - 1; j > 0; j--{
-        print "[J] " + j
+        print "[J] " + j + " - " + i
     }
     print ""
     // print "[I] " + i

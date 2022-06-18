@@ -63,8 +63,6 @@ class Maitre extends Master{
     private static Number total = 0
     
     Maitre(){
-        super("Julius")
-        print "{Nom} "+ super.nom
         total++
     }
     static cool(){
@@ -84,7 +82,7 @@ class Maitre extends Master{
 Maitre lens = Maitre(),
        superga = Maitre()
 superga.setNom("Superga")
-// lens.setNom("Lens")
+lens.setNom("Lens")
 lens.croiser(superga)
 // .test()
 Maitre.test()

@@ -1,0 +1,51 @@
+
+const final class Promise{
+    private switchTo = 0
+    private Array resolve = [], reject = [];
+
+    Promise(callable closure){
+        // print closure;
+        Any scope = closure;
+        timer((e){
+            closure(_resolve,_reject);
+        },100);
+    }
+
+    private Any _resolve(e){
+        //!Erreur : L'instruction return ne bloque pas la fonction
+        if(switchTo <= 1){
+            switchTo = 1;
+            for Number i = 0, j = len(resolve); i < j; i++{
+                resolve[i]();
+            }
+        }
+    }
+
+    private Any _reject(e){
+        if(switchTo != 1){
+            switchTo = 2;
+            for Number i = 0, j = len(reject); i < j; i++{
+                reject[i]();
+            }
+        }
+    }
+
+    Any then(callable cb){
+        push(resolve, cb);
+        return this
+    }
+    Any except(callable cb){
+        push(reject, cb);
+        return this
+    }
+}
+
+Promise((Any res,rej){
+    print "Bien"
+    timer(res,400)
+    timer(rej,200)
+}).then((e){
+    print "Goooal !"
+}).except((e){
+    debug "Nooo !"
+})
