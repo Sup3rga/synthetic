@@ -969,8 +969,9 @@
   */
  $syl.setExecutionMod = function(mod, relative){
      relative = this.set(relative,true);
-     var r = (!this.getStructure('tryingBlock') || !relative ? true : !this.getStructure('tryingBlock').blocked);
+     var r = !this.getStructure('tryingBlock') || !relative ? true : !this.getStructure('tryingBlock').blocked;
      r = r && mod;
+     r = r && !this.getStructure('return');
      r = r && (!this.getStructure('currentLoop') || !relative ? true : !this.getStructure('currentLoop').broken && !this.getStructure('currentLoop').continued);
     
      this.executing =  r;
@@ -2366,6 +2367,10 @@ $syl.clearString = function(value){
                      loop.end();
                  }
                  else if(Synthetic.Lang.blockEOS.indexOf(cursor.char) < 0){
+                     if($this.tryMethodInstead && cursor.char == ','){
+                         loop.end();
+                         return;
+                     }
                      $this.exception($this.err("illegal end of statement [ "+cursor.char+" ]"),true);
                  }
              }
@@ -2507,7 +2512,12 @@ $syl.clearString = function(value){
                                     });
                                     return;
                                  }
-                                 if((!result && $this.tryMethodInsteadConfirmed) || _char == '{'){
+                                 /**
+                                  * Si on essayait de capturer une fonction anonyme, il faudrait que le resultat soit
+                                  * null et que l'attribut 'tryMehodInsteadConfirmed' soit 'true' ou bien,
+                                  * le caractère actuel soit un '{' ou un ','
+                                  */
+                                 if((!result && $this.tryMethodInsteadConfirmed) || ['{', ','].indexOf(_char) >= 0){
                                      $this.cursor = $this.copy(_cursor);
                                      $this.tryMethodInsteadConfirmed = false;
                                      $this.tryMethodInstead = _tryMethod;
@@ -2582,11 +2592,11 @@ $syl.clearString = function(value){
             //  console.log('[DATA]',data.object)
              if($this.executing && !data.subvariables && !data.subvalue && !$this.isTypesEqual(data.object.type, Synthetic.Lang.typeFromConstants.Any) && (!r || !$this.isTypesEqual(r, data.object)) ){
                  
-                 if(!$this.getStructure('currentInstance') && (!r || !('labelConstraint' in r && r.labelConstraint == 'callable' && r.label == 'function'))){
+                 if(!$this.getStructure('instances') && (!r || !('labelConstraint' in r && r.labelConstraint == 'callable' && r.label == 'function'))){
                      if(_cursor){
                         $this.cursor = $this.copy(_cursor);
                      }
-                    //  console.log('[Data]',data.object);
+                    //  console.log('[Data]',data.object, r);
                      $this.exception($this.err($this.getTypeName(data.object.type)+" value expected, "+(r ? $this.getTypeName(r.implicitType) : "Any" )+" given !"));
                  }
              }
@@ -2921,6 +2931,7 @@ $syl.clearString = function(value){
      };
      if(autoReplace){
          this.currentScope = scope;
+        //  console.log('[Block]',scope);
      }
      return scope;
  }
@@ -3491,7 +3502,7 @@ $syl.clearString = function(value){
              },
              timer: function(){
                  var r = null,
-                     time = 100;
+                     time = 10;
                  this.err(1);
                  if(args[0].label != 'function'){
                     $this.exception($this.err("argument 0 must be a function"));
@@ -3500,17 +3511,40 @@ $syl.clearString = function(value){
                     this.expect(args[1], 1, [{type: Synthetic.Lang.typeFromConstants.Number.addr}]);
                     time = $this.toPrimitiveValue(args[1]);
                  }
-                //  console.log('[args]',args[0]);
+                 /**
+                  * Avant d'éxecuter une fonction asynchrone, on recupère toute les données de la
+                  * condition des structures actuelles
+                  */
                  var scope = {
                      old: $this.currentScope,
                      new: null,
+                     instance: $this.getStructure('instance'),
+                     parent: {
+                         old: null,
+                         new: null
+                     }
                  };
+                 scope.parent.old = scope.instance ? scope.instance.object.addr : $this.modules[$this.currentScope].parent;
+                //  console.log('[Instance][Timer]',);
+                //  if($this.executing)
                  setTimeout(function(){
+                     /**
+                      * Récupérer les conditions des structures actuelles au moment de son exécution
+                      */
                     scope.new = $this.currentScope;
-                    //  console.log('[Modules]',scope,$this.modules);
+                    scope.parent.new = $this.modules[$this.currentScope].parent;
+                    /**
+                     * Affecter les conditions initiales
+                     */
                     $this.currentScope = scope.old;
+                    $this.modules[$this.currentScope].parent = scope.parent.old;
                     $this.exec(ressources,args[0],{}).then(function(e){
+                        /**
+                         * Puis à la fin de l'exécution,
+                         * restaurer les conditions présentes lors du début de l'exécution
+                         */
                         $this.currentScope = scope.new;
+                        $this.modules[$this.currentScope].parent = scope.parent.new;
                         // console.log('[End]',e);
                     })
                  }, time);
@@ -3561,14 +3595,21 @@ $syl.clearString = function(value){
         obj = this.getObjectFromAddr(classSrc.members[i]);
         // console.log('[Obj]',obj);
         if(!obj.static){
+            // console.log('[Obj][Before]',obj.name, obj.addr);
             obj = this.copy(obj);
             obj.addr = this.addr();
+            // if(obj.name == '_resolve')
+            // console.log('[Instance]',obj.name,obj.addr,this.currentScope);
             obj.method = true;
+            // console.log('[Obj][After]',obj.name, obj.addr);
             obj.parent = this.currentScope;
         }
         this.save(obj);
     }
+    // console.log('[Object]',classSrc.name, '[Scope]', addr);
     this.modules[this.currentScope].besides = parents;
+    //@Debug
+    this.modules[this.currentScope].object = true;
     obj = this.extend({
         addr : addr, 
         parents: parents,
@@ -3778,8 +3819,23 @@ $syl.clearString = function(value){
  $syl.exec = function(ressources, callable, args){
     var $this = this;
     return new Promise(function(res){
+        /**
+         * On crée une étendue d'exécution pour la fonction
+         */
+        // if(callable.name == 'res' && $this.executing){
+        //     console.log('[In Module] res', callable.addr, '=>', $this.currentScope, callable.method); 
+        // }
         $this.createBlock();
-        // console.log('[NEXT]',callable.name,$this.currentScope);
+        /**
+         * On enregistre l'actuel object return execution pour le restaurer après 
+         * pour éviter les conflits.
+         */
+        var returnExec = [$this.saveStructure('return')];
+        /**
+         * On copie les données actuelles du curseur pour les restaurer après !
+         */
+        var cursor = $this.copy($this.cursor);
+        cursor.lines = $this.cursorOrigin(cursor.index);
         $this.createScopeObject(callable,args);
         $this.cursor = $this.copy(callable.scopeCursor);
         $this.parse({
@@ -3788,6 +3844,8 @@ $syl.clearString = function(value){
             end: callable.braced ? [Synthetic.Lang.constants._EOS.BRACE] : [],
             statementCount: callable.braced ? -1 : 1
         }).then(function(response){
+            $this.restoreStructure('return', returnExec);
+            $this.cursor = cursor;
             res(response);
         });
     });
@@ -3797,6 +3855,7 @@ $syl.clearString = function(value){
   */
  $syl.caller = function(callable,ressources){
      var $this = this, cursor;
+     
      /**
       * On sauvegarde le scope actuel pour le restaurer plus tard
       */
@@ -3806,8 +3865,17 @@ $syl.clearString = function(value){
          defaultConstruct = false,
          _constCtx = [$this.saveStructure('constructorContext')],
          _cursor = $this.copy($this.cursor);
+     /**
+      * Si le callable est une classe, on exécute son constructeur
+      */
      if(callable.label == 'class'){
+         /**
+          * On demande de créer une instance pour sa valeur de retour
+          */
          instance = $this.createInstance(callable);
+         /**
+          * On enregistre l'instance pour actualiser la lecture des méthodes
+          */
          _instanceKey.push($this.setStructure('instance', $this.meta({
              label: 'object',
              name: 'this',
@@ -3820,9 +3888,22 @@ $syl.clearString = function(value){
                  scope: instance.scope
              }
          },false)));
-         _constCtx.push($this.setStructure('constructorContext', false));
+         /**
+          * On définit un contexte de construteur pour permettre l'utilisation des
+          * mots-clés comme 'super' et l'appelation de 'this' 
+          * en alias à un constructeur définit (surchage)
+          */
+         _constCtx.push($this.setStructure('constructorContext', true));
          key.push($this.setScope(instance.scope));
+        //  console.log('[Scope]', this.currentScope);
+        /**
+         * On applique le constructeur à l'objet callable
+         */
          callable = callable._constructor;
+         /**
+          * Si la classe n'a pas de constructeur, on lui en crée un par défaut
+          * et on précise dans l'execution qu'on a un constructeur par défaut défini implicitement.
+          */
          if(!callable){
              callable = $this.meta({
                  type: instance.type,
@@ -3835,24 +3916,69 @@ $syl.clearString = function(value){
       * Si on fait appel au constructeur d'une classe à traver les objets 'this', 'super'
       */
      else if(callable.label == 'object'){
-         _constCtx.push($this.setStructure('constructorContext', false));
+         /**
+          * On définit nouvellement que le context construteur est vrai.
+          */
+         _constCtx.push($this.setStructure('constructorContext', true));
+         /**
+          * On récupère l'adresse de pointage de l'objet pour récupérer la classe de base
+          */
          var addr = callable.name == 'super' ? callable.object.parents[0].addr : callable.object.addr,
+         /**
+          * On cherche à récupérer l'objet de l'instanciation et le mettre en actualité pour
+          * permettre le contexte de 'this' et 'super' comme objet interne.
+          */
             setting = this.setInstanceTrace(addr,true);
+         /**
+          * On attribue à l'objet instance l'objet d'instanciation retrouvé précédemment
+          */
          instance = setting.instance;
+         /**
+          * On ajoute aussi sa clé provenant de la pile d'enregistrement de structure
+          */
          _instanceKey.push(setting._instanceKey);
+         /**
+          * Puis, à partir de l'adresse de pointage enregistrée précédemment, on récupère
+          * le constructeur (avec ses signatures) de la classe de base.
+          */
          callable = this.getObjectFromAddr(this.modules[addr].structure)._constructor;
-         noReturn = true; /** Empêche de vérifier la valeur de retour */
+         /** 
+          * Et puis on active 'noReturn' pour empêcher de vérifier la valeur de retour de l'alias
+          * du constructeur
+          */
+         noReturn = true; 
      }
+     /**
+      * Si l'adresse fournit dans la méthode existe dans les modules,
+      * on teste si c'est bien une méthode
+      */
      else if(callable.parent in this.modules){
+         /**
+          * On demande de récupérer l'objet d'instance de base de la méthode (si c'en est bien une)
+          */
          var setting = this.setInstanceTrace(callable.parent,callable.method);
+         /**
+          * puis on affecte l'objet 'instance' par l'objet instance trouvé précédemment dans le cas
+          * où il existait, sinon il equivaudrait à 'null'
+          */
          instance = setting.instance;
+         /**
+          * On enregistre la clé de l'objet depuis la pile de structure, au cas où il n'existerait pas,
+          * il aurait la valeur '-1'
+          */
          _instanceKey.push(setting._instanceKey);
+         /**
+          * Mais on dit qu'on n'est pas un contexte de constructeur
+          */
          _constCtx.push($this.setStructure('constructorContext', false));
         //  console.log('[Key]',_instanceKey, $this.structureSaver);
         //  console.log('[GOT]',callable,callable.parent);
      }
      return new Promise(function(res){
          $this.toNextChar().then(function(_char){
+             /**
+              * On récupère les arguments de l'appelation
+              */
              $this.arguments(callable,ressources,true).then(function(args){
                  if(!$this.executing){
                      res(null);
@@ -3864,6 +3990,12 @@ $syl.clearString = function(value){
                       */
                      if(!args){
                          /**
+                          * On restaure toute les structures précédentes avant de terminer.
+                          */
+                        $this.restoreStructure('constructorContext', _constCtx);
+                        $this.restoreStructure('instance',_instanceKey);
+                        $this.restoreScope(key);
+                         /**
                           * Si le resultat des arguments est nul on va vérifier:
                           *  * Si 'trynMethodeInstead' est activé, dans ce cas on prendra en compte
                           *    le traitement d'un callback (création)
@@ -3873,24 +4005,29 @@ $syl.clearString = function(value){
                              $this.tryMethodInsteadConfirmed = true;
                              res(null);
                              return;
-                         }else{
-                             res(callable);
-                             return;
                          }
+                         res(callable);
+                         return
                      }
+                     /**
+                      * Si c'est une fonction native,
+                      * pas besoin de lire le corps, on passe les commandes direct
+                      */
                      if(callable.native){
                         args = args.arguments;
                          $this.native(callable,args,ressources).then(function(value){
                              if(!value){
                                  value = $this.toVariableStructure(value,ressources);
                              }
+                             $this.restoreStructure('constructorContext', _constCtx);
+                             $this.restoreStructure('instance',_instanceKey);
+                             $this.restoreScope(key);
                              res(value);
-                         });
+                        });
                      }
                      else{
                         if((!callable || defaultConstruct) && instance && instance.instanciation){
                             $this.setExecutionMod(true);
-
                             // response = $this.toVariableStructure(response,ressources);
                             /**
                              * À la fin de l'éxecution de la fonction, on restaure 
@@ -3898,6 +4035,7 @@ $syl.clearString = function(value){
                              */
                             $this.restoreScope(key);
                             $this.restoreStructure('instance',_instanceKey);
+                            $this.restoreStructure('constructorContext', _constCtx);
                             res($this.meta({
                                 name: null,
                                 type: instance.type,
@@ -3912,11 +4050,6 @@ $syl.clearString = function(value){
                         }
                         else{
                             /**
-                             * On copie les données actuelles du curseur pour les restaurer après !
-                             */
-                            cursor = $this.copy($this.cursor);
-                            cursor.lines = $this.cursorOrigin(cursor.index);
-                            /**
                              * On définit le scope actuel comme le scope actuel pour le référencer
                              * lorsqu'on va créer le scope suivant comme actuel
                              * pour ne pas briser la chaine des scopes
@@ -3924,8 +4057,10 @@ $syl.clearString = function(value){
                             var defaultCallable = callable;
                             callable = args.signature;//$this.getSignature(callable, args.signature);
                             args = args.arguments;
-                            // console.log('[Callable]',args);
-                            // $this.definedUsingSignature(callable,args);
+                            /**
+                             * Si on ne trouve pas de signatures, c'est que l'appelation a été mal faite,
+                             * on donne alors une alerte.
+                             */
                             if(!callable){
                                 var types = '';
                                 for(var i in args){
@@ -3934,18 +4069,38 @@ $syl.clearString = function(value){
                                 $this.cursor = $this.copy(_cursor);
                                 $this.exception($this.err("undefined method signature like "+ (instance ? $this.getTypeName(instance.type)+'.' : '') +defaultCallable.name+"("+types+") !"));
                             }
+                            /**
+                             * On définit l'actuel scope à partir du scope de la fonction pour son
+                             * étendue
+                             */
                             key.push($this.setScope(callable.childScope));
+                            /**
+                             * Si on détecte l'utilisation d'une méthode d'instance,
+                             * on remplace provisoirement le parent de l'étendue actuelle par l'étendue
+                             * crée par l'objet de l'instanciation pour permettre une bonne rédirection
+                             * des méthodes dans la bonne étendue parente 
+                             * sans l'utilisation du pointeur 'this'
+                             */
                             if(instance){
                                 instance.replaceScope = {
                                     scope: $this.currentScope,
                                     parent: $this.modules[$this.currentScope].parent
                                 };
-                                // console.log('[_____scope_____]',callable.name,$this.currentScope, instance.scope);
                                 $this.modules[$this.currentScope].parent = instance.scope;
                             }
+                            /**
+                             * On exécute la fonction en attendant sa réponse.
+                             */
                             $this.exec(ressources,callable,args).then(function(response){
+                                /**
+                                 * on passe l'exécution mode en vrai
+                                 */
                                 $this.setExecutionMod(true);
                                 $this.restoreScope(key);
+                                /**
+                                 * Si on avait appelé un constructeur,
+                                 * on retourne l'objet d'instanciation
+                                 */
                                 if(instance && instance.instanciation){
                                     response = $this.meta({
                                         name: null,
@@ -3967,20 +4122,24 @@ $syl.clearString = function(value){
                                     if(!response){
                                         response = $this.toVariableStructure(response,ressources);
                                     }
-                                    if(!$this.isValidateConstraint(response, callable.type) && !noReturn){
+                                    /**
+                                     * Si le type de la valeur n'est pas compatible au type de retour 
+                                     * de la fonction, on lève une exception tout en tenant compte de 
+                                     * la véracité de 'noReturn'
+                                     */
+                                    if(!noReturn && !$this.isValidateConstraint(response, callable.type)){
                                         $this.exception($this.err(" "+callable.type+" expected, "+$this.getTypeName(response.type)+" given"));
                                     }
                                 }
                                 $this.restoreStructure('constructorContext', _constCtx);
                                 $this.restoreStructure('instance',_instanceKey);
+                                /**
+                                 * Si on avait affaire avec une instanciation ou une méthode,
+                                 * on remplace le scope parent par sa valeur initiale.
+                                 */
                                 if(instance){
                                     $this.modules[instance.replaceScope.scope].parent = instance.replaceScope.parent;
                                 }
-                                $this.cursor = $this.copy(cursor);
-                                /**
-                                 * À la fin de l'éxecution de la fonction, on restaure 
-                                 * le scope principale
-                                 */
                                 res(response);
                             });
                         }
@@ -4013,6 +4172,8 @@ $syl.clearString = function(value){
              arg, index = 0, _cursor, _reachCursor, _arg,
              withParenthese = 0, callCertitude = 0,
              arglist = {};
+         if($this.executing && serial.name == 'closure')
+         
          if(calling){
              arglist[0] = serial.arguments;
              for(var i in serial.signatures){
@@ -4224,13 +4385,19 @@ $syl.clearString = function(value){
                 //  console.log('[cursor]',cursor,calling);
                  if(calling && cursor.char != ':' && cursor.word && typeof cursor.word != 'object'){
                     //  console.log('[Search]',cursor.word, $this.executing);
+                    // if(cursor.word == '_resolve' && $this.executing){
+                    //     console.log($this.modules)
+                    //     console.log('[search for] _resolve', $this.currentScope);
+                    //     throw new Error('bien')
+                    // }
                      $this.cursor = $this.copy(_cursor);
                      $this.value({
                          object: arg,
                          ressources: ressources,
                          end: [Synthetic.Lang.constants._EOS.COMA, Synthetic.Lang.constants._EOS.PARENTHESE]
                      }).then(function(result){
-                        // console.log('[Result]',cursor.word, result);
+                        // console.log('[Result]',cursor.word, calling, result.parent)//, result);
+                        // if(cursor.word == '')
                          /**
                           * S'il y a contraint 'callable' de label sur l'argument
                           * pn verifie qu'il reçoit bien un callable ('external', 'function')
@@ -4505,7 +4672,7 @@ $syl.clearString = function(value){
              }
          })
          .then(function(){
-             
+             var name = serial.name;
              if(withParenthese != 0){
                  /**
                   * Il se peut qu'un argument ait le même nom qu'une fonction définie,
@@ -4608,6 +4775,8 @@ $syl.clearString = function(value){
                      }
                  }
                  _arguments = arg;
+                //  if(name == 'closure' && $this.executing)
+                //  console.log('[Arguments]',name,'::',_arguments);
              }
              /**
               * Si on n'a aucune certitude qu'on a fait appelle à la fonction
@@ -4865,7 +5034,9 @@ $syl.clearString = function(value){
          else if($this.isType(serial)){
              resultValue = serial;
          }
-
+        //  if(litteral == '_resolve' && $this.executing && syntObject){
+        //      console.log('[asking]', syntObject.addr,'[P]', syntObject.parent);
+        //  }
          /**
           * On ne peut pas déclarer une abstraction à l'extérieur d'une structure
           */
@@ -4890,9 +5061,9 @@ $syl.clearString = function(value){
              if(!_currentObjectInUse){
                  $this.exception($this.err("[ "+litteral+" ] does not point to any structure !"));
              }
-            //  console.log('[Object]',_currentObjectInUse);
+            //  console.log('[Object***]',_currentObjectInUse);
              serial = $this.meta({
-                 type: _currentObjectInUse.object.type,
+                 type: _currentObjectInUse.type,
                  label: 'object',
                  name: litteral,
                  value: _currentObjectInUse.value,
@@ -5284,7 +5455,7 @@ $syl.clearString = function(value){
                      }
                      else{
                         //  console.log('[Result]',resultValue);
-                         if(!$this.isCallable(resultValue,true)){
+                         if(!$this.isCallable(resultValue,true) && $this.executing){
                              $this.exception($this.err("cannot call "+(resultValue ? "[ "+resultValue.name+" ]" : "from null")+" !"));
                          }
                          if(MegaScope){
@@ -5447,7 +5618,7 @@ $syl.clearString = function(value){
                          else{
                             //  console.log('[Modules]',serial)
                             //  console.log('[Code]',$this.code.substr($this.cursor.index, 10));
-                            console.log('[FORIN]',forInArgSearching,$this.getStructure('currentLoop'));
+                            // console.log('[FORIN]',forInArgSearching,$this.getStructure('currentLoop'));
                              $this.exception($this.err("[ "+litteral+" ] is undefined !"));
                          }
                      }
@@ -5502,6 +5673,7 @@ $syl.clearString = function(value){
                  * Si c'est un constructeur, on l'enregistre comme constructeur
                  */
                 $this.linkWith(resultValue,MegaScope);
+                
                 if(resultValue.name == MegaScope.name && resultValue.label == 'function'){
                     if(MegaScope.label != 'class'){
                         $this.exception($this.err("Only class can have constructor !"));
@@ -5998,9 +6170,11 @@ $syl.clearString = function(value){
                         }
                         $this.toNextChar().then(function(_char){
                             if(_char == ','){
+                                waitingNext = true;
                                 if(extending && !implementing){
                                     $this.exception($this.err("Illegal character [ "+_char+" ]"));
                                 }
+                                loop.start();
                             }
                             else if(_char == '<' || _char == '{'){
                                 // console.log('[Char]',_char);
@@ -6230,6 +6404,7 @@ $syl.clearString = function(value){
                             end: braceless ? [] : [Synthetic.Lang.constants._EOS.BRACE],
                             statementCount: braceless ? 1 : -1
                         }).then(function(e){
+                            // console.log('[')
                             $this.setExecutionMod(executing);
                             $this.previousReason = reason;
                             
@@ -6297,6 +6472,7 @@ $syl.clearString = function(value){
              ternary: false
          }).then(function(result){
              if($this.executing){
+                 $this.setStructure('return', true);
                  $this.setExecutionMod(false);
                  res(result);
              }
@@ -6757,12 +6933,12 @@ $syl.clearString = function(value){
                                     type: 'loop',
                                     args: []
                                 });
-                                $this.meta({
+                                var e = $this.meta($this.extend(value,{
                                     type: value.type,
                                     implicitType: value.implicitType,
                                     name: 'i',
-                                    value: typeof value == 'object' && value != null ? value.value : value
-                                });
+                                    label: value.label
+                                }));
                                 $this.meta({
                                     type: Synthetic.Lang.typeFromConstants[/[\d]+(\.[\d]+)/.test(index) ? 'Number' : 'String'].addr,
                                     name: 'j',
@@ -6773,7 +6949,7 @@ $syl.clearString = function(value){
                                     name: 'k',
                                     value: count
                                 });
-                                executeScope(_char,remain > 1 && $this.executing, next, end);
+                                executeScope(_char,remain >= 1 && $this.executing, next, end);
                             });
                         }
                         else{
@@ -6948,21 +7124,22 @@ $syl.clearString = function(value){
                                                     delete $this.getStructure('currentLoop').args[i].value;
                                                 }
                                                 if(i < list.length){
-                                                    var currentArg = $this.getStructure('currentLoop').args[i];
+                                                    var currentArg = $this.getStructure('currentLoop').args[i],
+                                                        oldLabel = list[i].label;
                                                     if(!$this.isSuitable(list[i],currentArg) && (i < 0 || !$this.isTypesEqual(currentArg, Synthetic.Lang.typeFromConstants.String) ) ){
                                                         $this.exception($this.err("[ "+$this.getStructure('currentLoop').args[i].name+" ] is not suitable with "+(i > 0 ? "key" : "value")+" of object !"));
                                                     }
                                                     /**
                                                      * On crée les variables de l'étendue
                                                      */
-                                                    $this.meta($this.extend(list[i], $this.getStructure('currentLoop').args[i]));
+                                                    var e = $this.meta($this.extend(list[i], $this.getStructure('currentLoop').args[i]));
+                                                    e.label = oldLabel;
                                                 }
                                                 else{
                                                     break;
                                                 }
                                             }
-                                            
-                                            executeScope(_char,remain > 1 && $this.executing, next, end);
+                                            executeScope(_char,remain >= 1 && $this.executing, next, end);
                                         });
                                     }
                                     else{

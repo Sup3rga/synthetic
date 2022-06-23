@@ -1,51 +1,70 @@
+const interface Async{
+    then(callable e)
+    except(callable e)
+}
 
-const final class Promise{
+const interface Enumerable{
+    test()
+}
+
+const final class Promise implements Async, Enumerable{
     private switchTo = 0
     private Array resolve = [], reject = [];
 
     Promise(callable closure){
-        // print closure;
-        Any scope = closure;
+        // Any scope = closure;
         timer((e){
             closure(_resolve,_reject);
-        },100);
+        });
     }
 
     private Any _resolve(e){
-        //!Erreur : L'instruction return ne bloque pas la fonction
-        if(switchTo <= 1){
-            switchTo = 1;
-            for Number i = 0, j = len(resolve); i < j; i++{
-                resolve[i]();
-            }
+        if(switchTo > 1){
+            return;
         }
+        print "Ok " + len(resolve)
+        switchTo = 1;
+        for fn in resolve{
+            fn(e)
+        }
+        switchTo = 3
     }
 
     private Any _reject(e){
-        if(switchTo != 1){
-            switchTo = 2;
-            for Number i = 0, j = len(reject); i < j; i++{
-                reject[i]();
-            }
+        if(switchTo == 1 || switchTo == 3){
+            return;
         }
+        switchTo = 2;
+        for fn in reject{
+            fn(e)
+        }
+        switchTo = 3
     }
 
     Any then(callable cb){
         push(resolve, cb);
+        // print "adding resolve " + len(resolve)
         return this
     }
     Any except(callable cb){
         push(reject, cb);
         return this
     }
+
+    Any test(){
+        print "Bonjour !"
+    }
 }
 
-Promise((Any res,rej){
-    print "Bien"
-    timer(res,400)
-    timer(rej,200)
-}).then((e){
-    print "Goooal !"
-}).except((e){
+Async p = Promise((res,rej){
+    res({
+        module: 50,
+        name: "AN"
+    })
+})
+.then((e){
+    print ("Goooal ! ",e["name"])
+})
+.except((e){
     debug "Nooo !"
 })
