@@ -12,7 +12,7 @@ if object!="bien"{
 switch object {
     case "bien":
         print "Bonjour"
-    break
+    break;
     case "mauvais"|"bien":
         print "Bonsoir !"
     break;

@@ -930,7 +930,7 @@
     var keys = Array.isArray(key) ? key : [key],
         k;
     if(index in this.structureSaver.current){
-        for(var i in keys){
+        for(var i = keys.length-1; i >= 0; i--){
             if(Array.isArray(keys[i])){
                 keys[i] = keys[i][0];
             }
@@ -4269,8 +4269,7 @@ $syl.clearString = function(value){
              arg, index = 0, _cursor, _reachCursor, _arg,
              withParenthese = 0, callCertitude = 0,
              arglist = {};
-         if($this.executing && serial.name == 'closure')
-         
+        //  console.log('[Arglist]',arglist,serial)
          if(calling){
              arglist[0] = serial.arguments;
              for(var i in serial.signatures){
@@ -6666,6 +6665,7 @@ $syl.clearString = function(value){
      var $this = this,
          defaultInstead = this.set(defaultInstead,false),
          reference = this.getStructure('currentSwitch'),
+         _refKey = [this.saveStructure('currentSwitch')],
          _scopeKey = [$this.saveScope()],
          _executing = $this.executing,
          matched = false;
@@ -6738,7 +6738,7 @@ $syl.clearString = function(value){
                      }
                  }
                  $this.setExecutionMod(matched);
-                 reference = $this.setStructure('currentSwitch', null);
+                 _refKey.push($this.setStructure('currentSwitch', null));
                  loop.stop();
                  if($this.executing){
                      _scopeKey.push($this.saveScope(true));
@@ -6758,7 +6758,7 @@ $syl.clearString = function(value){
                      if(!matched){
                          $this.setExecutionMod(_executing);
                      }
-                     $this.restoreStructure('currentSwitch', reference[1]);
+                     $this.restoreStructure('currentSwitch', _refKey);
                      $this.restoreScope(_scopeKey);
                      
                      loop.end();
