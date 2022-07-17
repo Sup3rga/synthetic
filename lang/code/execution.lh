@@ -1,0 +1,34 @@
+
+nomFonctionAvecContrainte(Array<String> data : []){
+    print "Voici les noms que vous avez tapés !"
+    for i, j in data {
+        print "Nom [ " + j + " ] " + i
+    }
+}
+
+String formalize(String val){
+    String rep = ""
+    Boolean up = true;
+    for Number i = 0, j = len(val); i < j; i++{
+        // if up {
+        //     rep += maj str val[i]
+        // }
+        // else rep += str val[i]
+        rep += up ? maj(str(val[i])) : str(val[i])
+        up = val[i] == '-' || val[i] == "'" || val[i] == ' '
+    }
+    return rep
+}
+
+noms = []
+
+Boolean go = true
+String test;
+
+while go {
+    test = tap("Entrez un nom : ")
+    push(noms, formalize(test))
+    go = lower(tap "Voulez-vous continuez ? O/n ") == "o" ? true : false;
+}
+
+nomFonctionAvecContrainte noms

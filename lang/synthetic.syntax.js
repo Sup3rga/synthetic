@@ -710,6 +710,9 @@
                  until();
              }
              if(cursor >= len - 1){
+                 if(wrapper.comment == 2){
+                     $this.exception($this.err("unterminated comment occurred !"));
+                 }
                  if($this.cursor.scope != 0){
                      
                  }
@@ -1012,6 +1015,15 @@
      });
  }
  /**
+  * La méthode preventEOF permet d'éviter les problèmes de lecture jusqu'à la fin du fichier
+  * si ce n'est pas nécessaire
+  */
+ $syl.preventEOF = function(){
+     if(this.cursor.index >= this.code.length - 1){
+         this.backTo(1);
+     }
+ }
+ /**
   * La méthode read permet de lire le contenu un fichier. Elle retourne son contenu
   */
  $syl.read = function(filename){
@@ -1021,7 +1033,7 @@
          if(node_env){
              Synthetic.Lang.xhr.readFile(filename, 'utf-8', function(err,content){
                  if(err) throw err;
-                 $this.code = content+'\n\n';
+                 $this.code = content+';\n\n';
                  resolve();
              });
          }
@@ -1043,8 +1055,15 @@
  /**
   * La méthode genericType prend en charge le types généric
  */
- $syl.genericType = function(type,origin){
+ $syl.genericType = function(type,_struct){
      var $this = this,
+         _MOD = {
+            NORMAL : 0,
+            CREATION: 1,
+            ASSIGNATION: 2
+         },
+         _struct = this.set(_struct, _MOD.NORMAL),
+         _keyset = false,
          _currType, _cursor,
          _type = type, isBaseType;
      return new Promise(function(res,rej){
@@ -1053,7 +1072,7 @@
          }
          var _dictMod = !$this.isTypesEqual(_type, Synthetic.Lang.typeFromConstants.Array),
              _origin,
-             type = {
+             type = _struct > 0 ? {} : {
                  type: _type,
                  constraints: null,
                  hasKeyConstraint: false,
@@ -1158,6 +1177,7 @@
                          lastword = Synthetic.Lang.typeFromConstants.Any;
                          savetype();
                      }
+                    //  console.log('[TYPE]',type);
                      res(type);
                      loop.end();
                  }
@@ -1176,16 +1196,77 @@
                  _cursor = $this.copy($this.cursor);
                  _currType = $this.currentType;
                  $this.currentType = null;
-                 $this.litteral(lastword,{parent:null},true).then(function(type){
+                 $this.litteral(lastword,{parent:null},!_keyset).then(function(type){
+                     var _isType = $this.isType(type);
                     //  lastword += $this.code.substr(_cursor.index, $this.cursor.index - _cursor.index - 1);
-                     if(!type || !$this.isType(type)){
+                     if(_struct == 0 && (!type || !_isType)){
                          $this.exception($this.err("[ "+lastword+" ] is not a defined type !"));
                      }
-                     lastword = type;
-                     $this.currentType = _currType;
-                     cursor.char = $this.code[$this.cursor.index];
-                     nextStatements(cursor,loop);
-                     loop.start();
+                     /**
+                      * Si on est en mode type creation, on procède différemment.
+                      */
+                     if([_MOD.CREATION, _MOD.ASSIGNATION].indexOf(_struct) >= 0){
+                        $this.toNextChar().then(function(_char){
+                            /**
+                             * Si la clé du type generic est connu, on enregistre la partie valeur
+                             */
+                            if(_keyset){
+                                _type[_keyset] = $this.extend(type,{
+                                    name: _keyset,
+                                    addr: $this.addr(),
+                                    implicitType: type.addr,
+                                    type: type.addr
+                                });
+                                _keyset = null;
+                                if(['>', ','].indexOf(_char) >= 0){
+
+                                }
+                                else if(_char == '<'){
+
+                                }
+                                else{
+                                    $this.exception($this.err("illegal char [ "+_char+" ] encountered !")); 
+                                }
+                            }
+                            /**
+                             * Sinon on vérifie autre chose comme:
+                             *  * l'enregistrement d'une clé de remplacement pour un type,
+                             *  * la définition par défaut d'une clé
+                             */
+                            else{
+                                if(_isType){
+                                    $this.exception($this.err("[ "+lastword+" ] cannot be a defined type !"));
+                                }
+                                if(_char == ':'){
+                                    _type[lastword] = {};
+                                    _keyset = lastword;
+                                    $this.goTo(1);
+                                }
+                                else if(['>', ','].indexOf(_char) >= 0){
+                                    _type[lastword] = $this.extend(Synthetic.Lang.typeFromConstants.Any, {
+                                        name: lastword,
+                                        addr: $this.addr(),
+                                        implicitType: Synthetic.Lang.typeFromConstants.Any.addr,
+                                        type: Synthetic.Lang.typeFromConstants.Any.addr
+                                    });
+                                    _keyset = null;
+                                    $this.goTo(1);
+                                }
+                                else{
+                                    $this.exception($this.err("illegal char [ "+_char+" ] encountered !")); 
+                                }
+                                loop.start();
+                                console.log('[Creation]',_MOD.CREATION, _char);  
+                            }
+                        });
+                     }
+                     else{
+                        lastword = type;
+                        $this.currentType = _currType;
+                        cursor.char = $this.code[$this.cursor.index];
+                        nextStatements(cursor,loop);
+                        loop.start();
+                     }
                  });
                  return;
              }
@@ -1289,7 +1370,10 @@
  $syl.isTypesEqual = function(type1,type2){
         type1 = this.getObjectFromAddr(type1);
         type2 = this.getObjectFromAddr(type2);
-        // console.log({type1: type1.name,type2:  type2.name},  type1 == type2);
+        if(typeof type1 != 'object'){
+            console.trace('[TRACE]',type1);
+        }
+        // console.log({type1: type1.name,type2: type2},  type1 == type2);
         type1 = {
             type: this.isType(type1) ? type1 : this.isAddr(type1.type) ? new Synthetic.Lang.Reference(type1.type).getObject() : type1.type,
             alt: this.isType(type1) ? type1 : this.isAddr(type1.implicitType) ? new Synthetic.Lang.Reference(type1.implicitType).getObject() : type1.implicitType,
@@ -1855,21 +1939,24 @@ $syl.clearString = function(value){
                             $this.save(object);
                          }
                      }
-                     if(data.object.constraints && !$this.isValidateConstraint(object, data.object.constraints.value)){
-                         if(!$this.isTypeInBaseTypeList(['Array', 'JSON'],object.type)|| !data.object.constraints.recursive){
-                             $this.cursor = _cursor;
-                             $this.exception($this.err($this.toStringTypes(data.object.constraints.value)+" value expected, "+object.implicitType+" given !"));
-                         }
-                     }
-                     if(_type == 'Array'){
-                         if(object != undefined || $this.code[$this.cursor.index-1] != ']'){
-                             structure.value[index] = object;
-                         }
-                         index++;
-                     }
-                     else{
-                         structure.value[key] = object;
-                     }
+                     if(result !== undefined){
+                        if(data.object.constraints && !$this.isValidateConstraint(object, data.object.constraints.value)){
+                            if(!$this.isTypeInBaseTypeList(['Array', 'JSON'],object.type)|| !data.object.constraints.recursive){
+                                $this.cursor = _cursor;
+                                $this.exception($this.err($this.toStringTypes(data.object.constraints.value)+" value expected, "+object.implicitType+" given !"));
+                            }
+                        }
+                        if(_type == 'Array'){
+                            if(object != undefined || $this.code[$this.cursor.index-1] != ']'){
+                                structure.value[index] = object;
+                            }
+                            index++;
+                        }
+                        else{
+                            structure.value[key] = object;
+                        }
+                    }
+                    // console.log('[structure]', structure);
                      
                      key = null;
                      
@@ -1991,6 +2078,7 @@ $syl.clearString = function(value){
          $this.goTo(1);
          $this.runner(function(cursor,loop){
              if(!end){
+                //  console.log('[Tern][Search end]',data.reason)
                  loop.stop();
                  if(!data.reason && !pass){
                      $this.setExecutionMod(false);
@@ -2028,6 +2116,10 @@ $syl.clearString = function(value){
                      if(!data.reason){
                          result = value;
                      }
+                     if(Synthetic.Lang.EOS.indexOf($this.code[$this.cursor.index-1]) >= 0){
+                         $this.backTo(1);
+                     }
+                    //  console.log('[END][2]',data.reason,result,value)
                      $this.setExecutionMod(executing);
                      loop.end();
                  });
@@ -2104,6 +2196,7 @@ $syl.clearString = function(value){
                       * Puis on sauvegarde le curseur
                       */
                      _cursor = $this.copy($this.cursor);
+                    //  console.log('[VAL][LITT]',cursor.word);
                      /**
                       * Si on est en mode subvalue
                       * On va vérifier si on est en une appelle de fonction
@@ -2532,7 +2625,7 @@ $syl.clearString = function(value){
                                  $this.tryMethodInsteadConfirmed = false;
                                  $this.tryMethodInstead = _tryMethod;
      
-                                 if(_start == constants.BRACKET){
+                                  if(_start == constants.BRACKET){
                                      var val = $this.toPrimitiveValue(values[values.length - 1])[result.value];
                                      values[values.length - 1].value = val;
                                  }
@@ -2592,21 +2685,22 @@ $syl.clearString = function(value){
             //  console.log('[DATA]',data.object)
              if($this.executing && !data.subvariables && !data.subvalue && !$this.isTypesEqual(data.object.type, Synthetic.Lang.typeFromConstants.Any) && (!r || !$this.isTypesEqual(r, data.object)) ){
                  
-                 if(!$this.getStructure('instances') && (!r || !('labelConstraint' in r && r.labelConstraint == 'callable' && r.label == 'function'))){
+                 if(!r || !('labelConstraint' in r && r.labelConstraint == 'callable' && r.label == 'function')){
                      if(_cursor){
                         $this.cursor = $this.copy(_cursor);
                      }
-                    //  console.log('[Data]',data.object, r);
+                    //  console.log('[Data]',r, $this.getTypeName(r.type));
                      $this.exception($this.err($this.getTypeName(data.object.type)+" value expected, "+(r ? $this.getTypeName(r.implicitType) : "Any" )+" given !"));
                  }
              }
-             else if($this.executing && data.subvariables && data.object.constraints && (!r || !$this.isValidateConstraint(r, data.object.constraints.value)) ){
-                if(!r || !$this.isTypeInBaseTypeList(['Array', 'JSON'],r.type) || !data.object.constraints.recursive){
-                    //  console.log('[Object]',data.object, r);
-                     $this.exception($this.err($this.toStringTypes(data.object.constraints.value)+" value expected, "+(!r ? "Any" : $this.getTypeName(r.type))+" given !"));
+             else if(r !== undefined && $this.executing && data.subvariables && data.object.constraints && (!r || !$this.isValidateConstraint(r, data.object.constraints.value)) ){
+                if((!r && r !== undefined) || !$this.isTypeInBaseTypeList(['Array', 'JSON'],r.type) || !data.object.constraints.recursive){
+                    // console.log('[Type]', data.object, r);
+                    $this.exception($this.err($this.toStringTypes(data.object.constraints.value)+" value expected, "+(!r ? "Any" : $this.getTypeName(r.type))+" given !"));
                 }
              }
              $this.garbage();
+             $this.preventEOF();
              res(r);
          })
      });
@@ -3151,6 +3245,9 @@ $syl.clearString = function(value){
     }
     else{
         r = object && object.value ? object.value[key] : null; 
+        if(r && typeof r != 'object'){
+            r = this.toVariableStructure(r);
+        }
     }
     return r;
  }
@@ -4391,12 +4488,13 @@ $syl.clearString = function(value){
                     //     throw new Error('bien')
                     // }
                      $this.cursor = $this.copy(_cursor);
+                    //  console.log('[ARGS]WORD]',cursor.word,arg);
                      $this.value({
                          object: arg,
                          ressources: ressources,
                          end: [Synthetic.Lang.constants._EOS.COMA, Synthetic.Lang.constants._EOS.PARENTHESE]
                      }).then(function(result){
-                        // console.log('[Result]',cursor.word, calling, result.parent)//, result);
+                        // console.log('[Result]',cursor.word, calling, result)//, result);
                         // if(cursor.word == '')
                          /**
                           * S'il y a contraint 'callable' de label sur l'argument
@@ -4448,14 +4546,14 @@ $syl.clearString = function(value){
              callCertitude = 1;
              $this.goTo(1);
          }
- 
+
          $this.runner(function(cursor,loop){
              /**
               * On cherche les mots dans les arguments
               */
              
              if(cursor.word && cursor.word.length){
-                
+            
                  if(Synthetic.Lang.reservedKeys.indexOf(cursor.word) >= 0 && cursor.word != 'null'){
                      if(_typeset){
                          $this.exception($this.err("syntax error near by [ "+$this.getTypeName(arg.type)+" ... "+cursor.word+" ] !"),true);
@@ -4538,7 +4636,12 @@ $syl.clearString = function(value){
                          * On cherche à savoir si le litteral actuel est un Type
                          */
                         loop.stop();
+                        // console.log('[__Arg]',$this.cursor.index,arg);
                         $this.litteral(cursor.word,{parent: null},true).then(function(type){
+                            /**
+                             * Astuce de récupération (Temporaire);
+                             */
+                            // arg = cp_arg;
                             if(type && $this.isType(type)){
                                 if(arg.name || calling || (serial.label == 'external' && !$this.isTypesEqual(type, Synthetic.Lang.typeFromConstants.Any))){
                                     if(serial.label == 'external'){
@@ -4688,7 +4791,7 @@ $syl.clearString = function(value){
              }
              
              if(calling){
-                 arg = {};
+                 var _finalArg = {};
                 //  console.log('[_Arguments]',_arguments,arglist);
                  /**
                   * Parcourir la liste des arguments d'appel pour les comparer avec ceux
@@ -4759,25 +4862,26 @@ $syl.clearString = function(value){
                  index = 0;
                  for(var i in _arguments){
                      if(/^[0-9]+$/.test(i)){
-                         arg[i] = _arguments[i];
+                         _finalArg[i] = _arguments[i];
                          index = i * 1 + 1;
                      }
                      else{
                         //  console.log('[I]',i, _arguments[i], argName(i,false,[{type: _arguments[i].implicitType}]));
-                         arg[signature >= 0 ? serial[i].index : index] = _arguments[i];
+                         _finalArg[signature >= 0 ? serial[i].index : index] = _arguments[i];
                      }
                  }
                  if($this.executing){
                      for(var i in serial){
-                         if(serial[i].unset && !(serial[i].index in arg) ){
+                         if(serial[i].unset && !(serial[i].index in _finalArg) ){
                              $this.exception($this.err("argument [ "+serial.arguments[i].name+" ] has no value set !"));
                          }
                      }
                  }
-                 _arguments = arg;
+                 _arguments = _finalArg;
                 //  if(name == 'closure' && $this.executing)
                 //  console.log('[Arguments]',name,'::',_arguments);
              }
+             $this.preventEOF();
              /**
               * Si on n'a aucune certitude qu'on a fait appelle à la fonction
               * ce qui obligerait les '()'
@@ -5012,7 +5116,6 @@ $syl.clearString = function(value){
         //  previousObject = resultValue,
          _currentObjectInUse = null,
          _cursor;
-
          if(!$this.isType(serial) && MegaScope && serial){
             /**
              * On libère de la mémoire l'ancien objet
@@ -5125,7 +5228,7 @@ $syl.clearString = function(value){
              $this.exception($this.err("cannot override [ "+litteral+" ] declared previously as "+(resultValue.constant ? 'constant' : 'final')+" !"));
          }
          _cursor = $this.copy($this.cursor);
-         if(ref && !exist){
+         if(ref && !exist && !syntObject){
              res(null);
              return;
          }
@@ -5373,6 +5476,8 @@ $syl.clearString = function(value){
                                      _cursor = $this.copy($this.cursor);
                                      created = true;
                                      resultValue = serial;
+                                    //  $this.extendElse
+                                    //  console.log('[LITT][SERIAL]',serial);
                                  }
                              }
                              loop.end();
@@ -5488,17 +5593,20 @@ $syl.clearString = function(value){
                   * Mais si l'objet en cours est une fonction, on évite cette section pour passer
                   * à la suivante.
                   */
-                 else if(cursor.char == '[' && $this.executing && (!resultValue || resultValue.label != 'function') ){
-                    /**
-                     * Si on recherche des arguments pour la boucle for ... in
-                     * on empêche une affectation
-                     */
-                     if(forInArgSearching){
-                        $this.exception($this.err("syntax error withing for ... in statement"),true);
-                     }
-                     if(!exist && resultValue == null){
-                         $this.exception($this.err("[ "+cursor.char+" ] unexpected !"),true);
-                     }
+                 else if(cursor.char == '[' && (!resultValue || resultValue.label != 'function') ){
+                    
+                    if($this.executing){
+                        /**
+                         * Si on recherche des arguments pour la boucle for ... in
+                         * on empêche une affectation
+                         */
+                        if(forInArgSearching){
+                            $this.exception($this.err("syntax error withing for ... in statement"),true);
+                        }
+                        if(!exist && resultValue == null){
+                            $this.exception($this.err("[ "+cursor.char+" ] unexpected !"),true);
+                        }
+                    }
                      if(dotted){
                          $this.exception($this.err("syntax error !"),true);
                      }
@@ -5515,21 +5623,26 @@ $syl.clearString = function(value){
                          ternary: false,
                          end: [Synthetic.Lang.constants._EOS.BRACKET]
                      }).then(function(result){
-                         if($this.containsKey(result.value, resultValue)){
-                             previousObject = resultValue;
-                             resultValue = $this.getValueOf(result.value,resultValue);
-                         }
-                         else{
-                             /**
-                              * Si l'objet exist mais pas la clé,
-                              * on le prépare paresseusement pour un enregistrement
-                              */
-                             if($this.isTypeInBaseTypeList(['Array', 'JSON'],resultValue.type) && exist){
-                                 settingKey = result.value;
-                                 settingKeyObject = resultValue;
-                             }
-                             resultValue = null;
-                         }
+                         if($this.executing){
+                            if($this.containsKey(result.value, resultValue)){
+                                previousObject = resultValue;
+                                resultValue = $this.getValueOf(result.value,resultValue);
+                            }
+                            else{
+                                /**
+                                 * Si l'objet exist mais pas la clé,
+                                 * on le prépare paresseusement pour un enregistrement
+                                 */
+                                if($this.isTypeInBaseTypeList(['Array', 'JSON'],resultValue.type) && exist){
+                                    settingKey = result.value;
+                                    settingKeyObject = resultValue;
+                                }
+                                resultValue = null;
+                            }
+                        }
+                        else{
+                            resultValue = null;
+                        }
                          
                          _cursor = $this.copy($this.cursor);
                          loop.start();
@@ -5597,7 +5710,7 @@ $syl.clearString = function(value){
                          loop.end();
                          return;
                      }
-                     if(resultValue == null && settingKey){
+                     if(resultValue == null && settingKey && $this.executing){
                          $this.exception($this.err("can not read value of property [ "+settingKey+" ] "));
                      }
                     //  console.log('[Litt][End]',litteral,exist,$this.tryMethodInstead);
@@ -5668,6 +5781,8 @@ $syl.clearString = function(value){
              /**
               * S'il y a une mégastructure comme
               */
+            // if(litteral == 'tab')
+            // console.log('[LITT]',litteral, $this.cursor.index, $this.code.length);
             if(MegaScope && ['function','variable','mixin'].indexOf(resultValue.label) >= 0){
                 /**
                  * Si c'est un constructeur, on l'enregistre comme constructeur
@@ -5760,6 +5875,8 @@ $syl.clearString = function(value){
                 }
             }
              $this.restoreObjectAddr(key);
+             
+             $this.preventEOF();
             //  console.log('[ADDR][end]',$this.currentObjectAddr,litteral,typeof Synthetic.Lang.objects[$this.currentObjectAddr])
              res(resultValue);
          });
@@ -6105,9 +6222,9 @@ $syl.clearString = function(value){
                       */
                      loop.stop();
                      $this.litteral(cursor.word, ressources, true).then(function(old){
-                        // console.log('[Old]',old);
+                        // console.log('[Old]',old, cursor.word, $this.modules);
                         if(old && old.constant){
-                            $this.exception($this.err("Violation error from trying to rewrite class "+old.name+" defined at file: "+old.origin));
+                            $this.exception($this.err("Violation error from trying to rewrite class "+old.name+" defined constant at file: "+old.origin));
                         }
                         serial.name = cursor.word;
                         if(label == 'trait'){
@@ -6169,6 +6286,7 @@ $syl.clearString = function(value){
                             setImplementation(_super);
                         }
                         $this.toNextChar().then(function(_char){
+                            console.log('[Char]',_char);
                             if(_char == ','){
                                 waitingNext = true;
                                 if(extending && !implementing){
@@ -6177,7 +6295,7 @@ $syl.clearString = function(value){
                                 loop.start();
                             }
                             else if(_char == '<' || _char == '{'){
-                                // console.log('[Char]',_char);
+                                console.log('[Char]',_char);
                                 loop.start();
                             }
                             else{
@@ -6210,7 +6328,9 @@ $syl.clearString = function(value){
                 }
                 loop.stop();
                 console.log('[Type]', 'setting');
-                // $this.genericType()
+                $this.genericType(serial, 1).then(function(gen){
+                    console.log('[Generic]', gen.constraints);
+                });
              }
              else if(cursor.char == '{'){
                  $this.garbage();
@@ -6837,6 +6957,7 @@ $syl.clearString = function(value){
             }).then(function(result){
                 // console.log('__________[loop][end]',parentheseless,braceless, $this.code.substr($this.cursor.index, 10));
                 if($this.code[$this.cursor.index] != '}' && parentheseless){
+                    console.log('[Find]',$this.code.substr($this.cursor.index, 10));
                     $this.exception($this.err("[ } ] expected !"), true);
                 }
                 if($this.code[$this.cursor.index] == '}' && braceless){
@@ -6998,7 +7119,8 @@ $syl.clearString = function(value){
                                 $this.createBlock();
                                 scopeCreated = true;
                             }
-                            reason = !$this.executing ? false : result.value == 'false' ? true : $this.toBoolean(result.value);
+                            
+                            reason = !$this.executing ? false : /*result.value == 'false' ? true :*/ $this.toBoolean(result.value);
                             $this.executing = reason;
                             remain = reason ? 2 : 0;
                             executeScope(_char,reason,until);

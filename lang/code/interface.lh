@@ -3,11 +3,12 @@ const interface Async{
     except(callable e)
 }
 
-const interface Enumerable{
+const interface Await{
     test()
 }
 
-const final class Promise implements Async, Enumerable{
+const final class Promise implements Async, Await 
+{
     private switchTo = 0
     private Array resolve = [], reject = [];
 
@@ -22,7 +23,6 @@ const final class Promise implements Async, Enumerable{
         if(switchTo > 1){
             return;
         }
-        print "Ok " + len(resolve)
         switchTo = 1;
         for fn in resolve{
             fn(e)
@@ -56,14 +56,14 @@ const final class Promise implements Async, Enumerable{
     }
 }
 
-Async p = Promise((res,rej){
+Await p = Promise((res,rej){
     res({
         module: 50,
         name: "AN"
     })
 })
 .then((e){
-    print ("Goooal ! ",e["name"])
+    print("Goooal ! ",e.name)
 })
 .except((e){
     debug "Nooo !"
