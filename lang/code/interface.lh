@@ -57,7 +57,7 @@ const final class Promise implements Async, Await
 }
 
 Await p = Promise((res,rej){
-    res({
+    rej({
         module: 50,
         name: "AN"
     })

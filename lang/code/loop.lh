@@ -46,12 +46,12 @@ test = {
 //     k++
 // }
 
-for(Number i = 2; i < 5; i++){
-    for Number j = i - 1; j > 0; j--{
-        print "[J] " + j + " - " + i
-    }
-    print ""
-    // print "[I] " + i
-}
+// for(Number i = 2; i < 5; i++){
+//     for Number j = i - 1; j > 0; j--{
+//         print "[J] " + j + " - " + i
+//     }
+//     print "-------------------------"
+//     // print "[I] " + i
+// }
 
 print "La boucle est finie !"

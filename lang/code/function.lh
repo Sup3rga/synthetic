@@ -2,8 +2,8 @@ bien = int("50")
 //Appelation
 // debug(bien)
 presenter(const String nom : "bien", String prenom){
-    debug prenom + " " + nom 
-    if nom == "bien"{
+    debug nom + " " + prenom
+    if nom == "bien" {
         print "Le nom n'a pas changé"
     }
     else{
@@ -19,27 +19,28 @@ String setUp(JSON list){
     print list["bien"]
     return ""
 }
-_nom = "Jean"
+// _nom = "Jean"
 // debug (_nom+" ok", _nom)
 // _paul = "Jacques"
 // debug _paul
 presenter(prenom : "Bonjour")
 // presenter "Bonjour"
-// setUp({
-//     bien : "Ok"
-// })
+setUp({
+    bien : "Ok"
+})
 
 // prenom = "Julien"
 
-// String test(String nom : (tester){
-//     return tester + " !!!"
-// }
-// ){ 
-//     String bien = "Ok"
-//     // nom bien
-//     // print tk
-//     return nom "bien"
-// }
+String test(
+    String nom : (tester){
+        return tester + " !!!"
+    }
+){ 
+    String bien = "Ok"
+    // nom bien
+    // print tk
+    return nom "bien"
+}
 
 // print test((tk){
 //     return "Hello everyone ! " + tk
@@ -56,8 +57,9 @@ presenter(prenom : "Bonjour")
 // alias = fn("Bien")
 
 // alias "Synthetic"
-// // print test "le bonjour"
-// // print test "le bonsoir"
+
+// print test "le bonjour"
+// print test "le bonsoir"
 
 // String fn(String nom){
 //     print "Bonjour " + nom + " !"
@@ -96,7 +98,7 @@ String test(String e){
         JSON<...> test = {
             ok : "word",
             cool: {
-                bien : callable(){
+                bien : func(){
                     return "Bien"
                 }
             }
@@ -110,23 +112,24 @@ prime = test "Eric !";
 second = test "Jacques";
 prime()
 second()
-// print ("[PRIME]", prime)
-// prime()
-// second()
+
+print ("[PRIME]", prime)
+prime()
+second()
 // print test var
 
 // print var
 
-// JSON<String,String> callbacks = {}
+JSON<String,String> callbacks = {}
 
-// callbacks.bien = test;
+callbacks.bien = test;
 
-// print callbacks
+print callbacks
 
-// String prime(callable unset String bien, String test){
-//     print test
-//     print typeof bien;
-//     return "bien"
-// }
+String prime(unset callable String bien, String test){
+    print test
+    print typeof bien;
+    return "bien"
+}
 
-// prime(callbacks.bien, "Ok !")
+prime(callbacks.bien, "Ok !")

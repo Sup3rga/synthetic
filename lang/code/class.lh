@@ -84,5 +84,5 @@ Maitre lens = Maitre(),
 superga.setNom("Superga")
 lens.setNom("Lens")
 lens.croiser(superga)
-// .test()
-Maitre.test()
+.test()
+Maitre.cool()

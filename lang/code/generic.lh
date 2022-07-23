@@ -1,3 +1,14 @@
-class MyClass<T : String>{
+class MyClass<T : Number>{
+    T bab;
 
+    T getVal() return 50
 }
+
+JSON<String,...> ok = {
+    50 : true
+}
+
+// Number ok = 50;
+MyClass<String> e = MyClass<String>()
+
+// print e.getVal()
